@@ -1,4 +1,4 @@
-# 小柯文件PDF助手（XiaoKePdf）
+# 小柯文件PDF助手（XiaoKePdf）https://achir1015.github.io/xiaoke-pdf/
 
 PDF 閱讀與編輯工具，有 **Android App** 與 **免安裝網頁版** 兩種，功能參考 [PdfCraft](https://github.com/PDFCraftTool/pdfcraft)。
 閱讀、編輯文字、註解、填表、簽署、整理頁面、合併分割、加密、塗銷、移除浮水印……全部在手機或瀏覽器上完成。
