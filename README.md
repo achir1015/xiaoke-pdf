@@ -38,6 +38,10 @@ PDF 閱讀與編輯工具，有 **Android App** 與 **免安裝網頁版** 兩�
 
 ### 網頁版的程式結構
 
+<img width="1920" height="1080" alt="{3D5C8DEB-75CE-4EA1-B61B-E37E15F6765A}" src="https://github.com/user-attachments/assets/e0652a6d-d493-4688-ba47-598beccbd21b" />
+
+<img width="1915" height="1079" alt="{1325581B-0F53-4B51-83D6-4D324804D3D5}" src="https://github.com/user-attachments/assets/937e3a52-0add-4c97-b8c1-848d11c840a1" />
+
 純 HTML + JavaScript（ES 模組），不需要編譯。依「領域模型」分層：
 
 ```
