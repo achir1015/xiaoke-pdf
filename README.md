@@ -1,13 +1,71 @@
 # 小柯文件PDF助手（XiaoKePdf）
 
-手機版 PDF 閱讀與編輯 App（Android），功能參考 [PdfCraft](https://github.com/storytold/pdfcraft)。
-閱讀、編輯文字、註解、填表、簽署、整理頁面、合併分割、加密、塗銷、移除浮水印……全部在手機上完成。
+PDF 閱讀與編輯工具，有 **Android App** 與 **免安裝網頁版** 兩種，功能參考 [PdfCraft](https://github.com/PDFCraftTool/pdfcraft)。
+閱讀、編輯文字、註解、填表、簽署、整理頁面、合併分割、加密、塗銷、移除浮水印……全部在手機或瀏覽器上完成。
 
-**隱私至上：文件絕對不會離開你的裝置。** 不需要帳號、不收集使用資料、沒有雲端處理。只有按「檢查更新」時會連到 GitHub 查詢新版。
+**隱私至上：文件絕對不會離開你的裝置。** 不需要帳號、不收集使用資料、沒有雲端處理。App 只有按「檢查更新」時會連到 GitHub 查詢新版；網頁版只會下載程式函式庫與中文字型，PDF 本身不會傳出去。
 
 <img src="docs/edit-text.png" width="240" alt="編輯文字與格式"> <img src="docs/edited.png" width="240" alt="修改後的文字"> <img src="docs/remove-watermark.png" width="240" alt="移除浮水印">
 
-## 📲 下載安裝（Android 7.0 以上）
+## 🌐 網頁版（免安裝，電腦、手機都能用）
+
+**👉 [開啟小柯文件PDF助手網頁版](https://achir1015.github.io/xiaoke-pdf/)**
+
+打開網頁、把 PDF 拖進去就能編輯，改好按「下載 PDF」。檔案全程在你的瀏覽器裡處理，**不會上傳**。
+
+<img src="docs/web-edit.png" width="720" alt="網頁版：修改文字、插入連結與影音">
+
+| 工具 | 可以做什麼 |
+|---|---|
+| ✏️ **改原文字** | 原本的文字會用藍框標出，點一下那一行就能直接改。下載時舊字會從檔案裡真正刪除（不只是蓋住），搜尋、複製都不會再出現 |
+| 🔤 **新增文字** | 中文使用內建的 jf open 粉圓字型，存檔後是可以搜尋、複製的真正文字；字級、顏色、背景色、粗體、底線、刪除線、對齊、行高 |
+| 🩹 **遮蓋** | 像修正帶一樣框出要蓋掉的區域，可以從頁面取樣背景色 |
+| 🔗 **網址連結** | 點一下插入可點擊的文字連結；框選則在原本的字上加一塊透明點擊區。自動補 `https://`，中文網址自動轉碼，也支援 Email、電話 |
+| ▶️ **影音** | 放一張播放卡片：YouTube／影片網址（整張卡片可點，附 QR Code，印成紙本也能掃），或把本機影片、音訊檔直接嵌入 PDF 成為附件。編輯時可以在卡片上直接預覽播放 |
+| 🖼️ **圖片** | PNG、JPG、WebP… 拖曳改大小時保持比例（按 Shift 自由變形）；也可以直接把圖片拖進頁面 |
+| 💧 **加浮水印** | 文字或圖片浮水印；透明度、角度、置中／滿版重複／頁首／頁尾、蓋在上方或墊在下方、指定頁碼（`1-3,5`、`奇數`）。頁面上即時預覽 |
+| 🚫 **去浮水印** | 自動分析文件：① 標準浮水印（Acrobat、小柯 App、本網頁加的）② 依文字移除（會先告訴你會刪掉幾個區塊）③ 依圖層移除 ④ 每頁重複的 Logo 圖片 |
+
+<img src="docs/web-unwatermark.png" width="360" alt="去浮水印"> <img src="docs/web-watermark.png" width="360" alt="加浮水印與即時預覽">
+
+其他：每一步都可以**復原／重做**（加、去浮水印也可以）、旋轉過的頁面也能正確編輯、手機上工具列在底部、屬性面板變成底部抽屜。
+
+**快捷鍵**：`V` 選取、`E` 改原文字、`T` 文字、`R` 遮蓋、`L` 連結、`M` 影音、`I` 圖片、`W` 加浮水印、`U` 去浮水印、`Delete` 刪除、`Enter` 編輯文字、方向鍵微調（加 Shift 一次 10 點）、`Ctrl+Z / Ctrl+Y` 復原／重做、`Ctrl+D` 複製、`Ctrl+S` 下載、`Ctrl + 滾輪` 縮放。
+
+> **使用限制**：有密碼保護的 PDF 請先用 App 的「移除保護」；掃描檔（整頁是圖片）裡的字無法直接改，請用「遮蓋」＋「新增文字」；浮水印如果和內容一起印在掃描圖片裡也無法分離。PDF 沒有所有閱讀器都通用的影片播放方式，所以網址影音是「可點擊的卡片」，嵌入的影音檔是「附件」（Acrobat、Foxit 點迴紋針即可播放）。
+
+### 網頁版的程式結構
+
+純 HTML + JavaScript（ES 模組），不需要編譯。依「領域模型」分層：
+
+```
+web/
+├─ index.html              畫面骨架與函式庫網址（importmap，固定版本）
+├─ css/app.css             樣式（淺色／深色、手機版）
+└─ js/
+   ├─ domain/              領域模型：不碰畫面、不碰 PDF 函式庫
+   │  ├─ elements.js       頁面上的「貼紙」：文字、遮蓋、連結、影音、圖片
+   │  ├─ session.js        編輯工作階段：底稿 + 貼紙 + 歷史快照（復原／重做）
+   │  └─ page.js           頁面幾何：螢幕座標 ⇄ PDF 座標（處理旋轉頁）
+   ├─ pdf/                 PDF 加工：pdf.js 繪製、pdf-lib 寫入
+   │  ├─ renderer.js       繪製頁面、讀出文字行位置
+   │  ├─ exporter.js       把貼紙印到 PDF
+   │  ├─ textEraser.js     刪除被取代的原文字
+   │  ├─ watermarkAdder.js / watermarkRemover.js   加／去浮水印（規則與 Android 版相同）
+   │  ├─ contentStream.js  PDF 繪圖指令解析器
+   │  ├─ fontDecoder.js    字碼 → 文字（ToUnicode 對照表）
+   │  ├─ fonts.js          粉圓字型載入與 HarfBuzz 子集化
+   │  └─ media.js          影音播放卡片與 QR Code
+   └─ ui/                  畫面：App 主控制器、文件畫面、屬性面板
+```
+
+**在自己電腦上執行**：在專案根目錄執行 `python -m http.server 8000`，再打開 <http://localhost:8000/web/>（需要網路下載函式庫；中文字型會自動從 GitHub 讀取）。
+
+**發佈**：推到 `main` 後，GitHub Actions（`.github/workflows/pages.yml`）會把 `web/` 和中文字型組合好推到 `gh-pages` 分支。第一次使用請到倉庫的 **Settings → Pages**，Source 選 **Deploy from a branch**、Branch 選 **gh-pages / (root)**，按 Save。
+
+## 📱 Android App
+
+### 📲 下載安裝（Android 7.0 以上）
 
 **[⬇️ 下載 XiaoKePdf.apk（v1.0.1）](https://github.com/achir1015/xiaoke-pdf/raw/main/release/XiaoKePdf.apk)**
 
@@ -21,7 +79,7 @@
 4. 安裝後打開「小柯文件PDF助手」，按「開啟檔案」選 PDF；也可以從 LINE、Gmail、檔案管理等 App 用「分享」或「開啟方式」把 PDF 交給它。
 5. 之後要更新：在 App 首頁最下方（或「⋮ → 設定」）按「檢查更新」，有新版會自動下載並開啟安裝畫面，直接安裝覆蓋即可，開著的文件與設定都會保留。第一次更新時，Android 會要求允許本 App「安裝未知應用程式」。
 
-## 功能
+## App 功能
 
 ### 閱讀
 - 連續捲動、單頁、雙頁、檢視旋轉、全螢幕無干擾閱讀
@@ -69,7 +127,7 @@
 
 > OCR 文字辨識還在開發中（預計 v1.2）。
 
-## 編譯（不用 Gradle）
+## App 編譯（不用 Gradle）
 
 需要 Python 3.8+、JDK 17、Android SDK（build-tools 34.0.0、platforms/android-34）。
 在專案根目錄建立 `local.properties`：
@@ -91,6 +149,16 @@ python build.py
 |---|---|---|
 | [PDFBox-Android](https://github.com/TomRoush/PdfBox-Android) 2.0.27.0 | PDF 解析、編輯、文字擷取 | Apache 2.0 |
 | [Bouncy Castle](https://www.bouncycastle.org/) 1.72 | 數位簽章 | MIT |
-| [jf open 粉圓](https://github.com/justfont/open-huninn-font) 2.1 | 寫入 PDF 的中文字型 | SIL Open Font License 1.1（漢字部分源自 Kosugi Maru，Apache 2.0），授權全文見 `assets/fonts/jf-openhuninn-OFL.txt` |
+| [jf open 粉圓](https://github.com/justfont/open-huninn-font) 2.1 | 寫入 PDF 的中文字型（App 與網頁版共用） | SIL Open Font License 1.1（漢字部分源自 Kosugi Maru，Apache 2.0），授權全文見 `assets/fonts/jf-openhuninn-OFL.txt` |
 
 頁面繪製使用 Android 內建的 PdfRenderer。
+
+網頁版另外使用：
+
+| 元件 | 用途 | 授權 |
+|---|---|---|
+| [PDF.js](https://github.com/mozilla/pdf.js) 6.4 | 繪製頁面、讀取文字位置 | Apache 2.0 |
+| [pdf-lib](https://github.com/Hopding/pdf-lib) 1.17 ＋ [fontkit](https://github.com/Hopding/fontkit) | 寫入 PDF | MIT |
+| [HarfBuzz](https://github.com/harfbuzz/harfbuzzjs)（harfbuzzjs 1.6） | 中文字型子集化（只嵌入用到的字） | MIT |
+| [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0 | 影音卡片的 QR Code | MIT |
+| [pako](https://github.com/nodeca/pako) 2.1 | fontkit 的解壓縮 | MIT ／ Zlib |

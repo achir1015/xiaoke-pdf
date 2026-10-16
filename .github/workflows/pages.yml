@@ -1,0 +1,42 @@
+# 網頁版自動發佈：main 分支的 web/ 有更新時，組合網站檔案並推到 gh-pages 分支
+name: 發佈網頁版
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'assets/fonts/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 組合網站檔案（網頁 + 中文字型）
+        run: |
+          mkdir -p _site/fonts
+          cp -r web/. _site/
+          cp assets/fonts/jf-openhuninn-2.1.ttf assets/fonts/jf-openhuninn-OFL.txt _site/fonts/
+          touch _site/.nojekyll
+
+      - name: 推到 gh-pages 分支
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: '發佈網頁版'
