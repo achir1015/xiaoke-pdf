@@ -676,7 +676,7 @@ public class MainActivity extends Activity implements PdfView.L {
         if (d.uri != null) b.setNegativeButton("用其他 App 開啟", (x, w) -> {
             try {
                 Intent i = new Intent(Intent.ACTION_VIEW).setDataAndType(d.uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                startActivity(Intent.createChooser(i, "開啟"));
+                startExternal(Intent.createChooser(i, "開啟"));
             } catch (Exception e) { U.toast(this, "沒有可以開啟的 App"); }
         });
         b.show();
@@ -690,10 +690,16 @@ public class MainActivity extends Activity implements PdfView.L {
         }, f -> shareFile(f, "application/pdf")));
     }
 
+    /** 開啟其他 App（分享、檢視）時放在它自己的工作，按返回不會把其他 App 的畫面留在本 App 裡。 */
+    public void startExternal(Intent i) {
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
     public void shareFile(File f, String mime) {
         Intent i = new Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, FileProv.uri(f))
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivity(Intent.createChooser(i, "分享"));
+        startExternal(Intent.createChooser(i, "分享"));
     }
 
     @Override
@@ -750,7 +756,7 @@ public class MainActivity extends Activity implements PdfView.L {
                 if ("Link".equals(a.sub)) {
                     if (a.uri != null) {
                         U.confirm(this, "開啟連結", a.uri, "開啟", () -> {
-                            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(a.uri))); } catch (Exception e) { U.toast(this, "無法開啟"); }
+                            try { startExternal(new Intent(Intent.ACTION_VIEW, Uri.parse(a.uri))); } catch (Exception e) { U.toast(this, "無法開啟"); }
                         });
                     } else if (a.dest >= 0) view.goTo(a.dest);
                     return;
@@ -801,7 +807,7 @@ public class MainActivity extends Activity implements PdfView.L {
         selBar.addView(selBtn("搜尋", v -> { String s = view.selectedText(); clearSel(); openSearch(); searchEdit.setText(s); }));
         selBar.addView(selBtn("分享", v -> {
             if (!d.canCopy()) { U.alert(this, "無法分享", "作者不允許複製這份文件的內容。"); return; }
-            startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, view.selectedText()), "分享文字"));
+            startExternal(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, view.selectedText()), "分享文字"));
         }));
         selBar.addView(selBtn("整頁", v -> view.selectAllOnPage(view.selPage)));
         selBar.addView(selBtn("✕", v -> clearSel()));

@@ -531,7 +531,7 @@ public final class Panels {
                         try { U.copyFile(f, shared); } catch (Exception ignored) {}
                         if (i == 0) {
                             try {
-                                a.startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(FileProv.uri(shared), mime)
+                                a.startExternal(new android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(FileProv.uri(shared), mime)
                                         .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION));
                             } catch (Exception e) { U.toast(a, "沒有可以開啟這種檔案的 App"); }
                         } else if (i == 1) {

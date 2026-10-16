@@ -9,7 +9,7 @@
 
 ## 📲 下載安裝（Android 7.0 以上）
 
-**[⬇️ 下載 XiaoKePdf.apk（v1.0.0）](https://github.com/achir1015/xiaoke-pdf/raw/main/release/XiaoKePdf.apk)**
+**[⬇️ 下載 XiaoKePdf.apk（v1.0.1）](https://github.com/achir1015/xiaoke-pdf/raw/main/release/XiaoKePdf.apk)**
 
 也可以到 [Releases 頁面](https://github.com/achir1015/xiaoke-pdf/releases/latest) 下載。
 
