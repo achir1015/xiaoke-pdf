@@ -1,0 +1,6 @@
+libs/** -text
+assets/** -text
+*.png binary
+*.apk binary
+*.ttf binary
+*.jar binary

@@ -1,0 +1,9 @@
+build/
+build.log
+*.jks
+*.keystore
+local.properties
+*.apk
+
+# 下載安裝用的 APK
+!release/XiaoKePdf.apk
