@@ -9,6 +9,7 @@ import { fonts } from './fonts.js';
 import { hexToRgb } from './util.js';
 import { mediaCardPng, safeUrl } from './media.js';
 import { eraseTextInRects } from './textEraser.js';
+import { ASC, DESC, measureVertical, verticalGlyph, verticalCharset } from './vertical.js';
 
 const { PDFDocument, StandardFonts, PDFOperator, PDFString, PDFHexString, rgb, degrees } = PDFLib;
 
@@ -62,7 +63,7 @@ async function prepareFonts(doc, els, missingOut) {
   const safeText = new Map();
   let huninnText = '';
   for (const el of textEls) {
-    const key = el.font || 'huninn';             // 連結文字一律用粉圓（常常是中文）
+    const key = el.vertical ? 'huninn' : (el.font || 'huninn');   // 直書一律用粉圓；連結文字也多半是中文
     if (key !== 'huninn') {
       if (!std.has(key)) std.set(key, await doc.embedFont(StandardFonts[key] || StandardFonts.Helvetica));
       try { std.get(key).encodeText(el.text.replace(/\n/g, '')); continue; } catch (e) { /* 標準字型印不出來，改用粉圓 */ }
@@ -72,7 +73,7 @@ async function prepareFonts(doc, els, missingOut) {
     const { text, missing } = await fonts.filterSupported(el.text);
     missing.forEach(c => missingOut.add(c));
     safeText.set(el.id, text);
-    huninnText += text;
+    huninnText += el.vertical ? text + verticalCharset(text) : text;   // 直書還要括號的直書字形
   }
   let huninn = null;
   if (needHuninn.size) huninn = await doc.embedFont(await fonts.subsetHuninn(huninnText), { subset: false });
@@ -125,6 +126,52 @@ function drawLines(doc, page, g, x, y, opt, fontInfo) {
   if (opt.bold) page.pushOperators(PDFOperator.of('Tr', [doc.context.obj(0)]));
 }
 
+/**
+ * 直書：照瀏覽器排好的位置逐字畫。中文站著、英數字順時針躺著（規則見 vertical.js）。
+ * 底線畫在每一行的左側、刪除線畫在中間，和編輯畫面一致。
+ */
+function drawVertical(doc, page, g, el, fontInfo) {
+  const { font } = fontInfo;
+  const size = el.size;
+  const c = hexToRgb(el.color);
+  const color = rgb(c.red, c.green, c.blue);
+  if (el.bold) {
+    page.pushOperators(
+      PDFOperator.of('Tr', [doc.context.obj(2)]),
+      PDFOperator.of('w', [doc.context.obj(size * 0.03)]),
+      PDFOperator.of('RG', [c.red, c.green, c.blue].map(v => doc.context.obj(v))));
+  }
+  const { chars } = measureVertical(el, fontInfo.text);
+  const columns = new Map();      // 每一直行的上下範圍（畫底線、刪除線用）
+  for (const q of chars) {
+    const cx = el.x + q.left + q.width / 2;
+    const key = Math.round(cx * 10);
+    const col = columns.get(key) || { cx, top: Infinity, bottom: -Infinity };
+    col.top = Math.min(col.top, el.y + q.top); col.bottom = Math.max(col.bottom, el.y + q.top + q.height);
+    columns.set(key, col);
+    if (/\s/.test(q.ch)) continue;
+    const { ch, upright } = verticalGlyph(q.ch);
+    let a;
+    if (upright) {
+      const adv = font.widthOfTextAtSize(ch, size);
+      a = g.anchor(cx - adv / 2, el.y + q.top + size * ASC);
+    } else {
+      a = g.anchor(cx - (size * (ASC - DESC)) / 2, el.y + q.top, -90);   // 順時針轉 90 度
+    }
+    page.drawText(ch, { x: a.x, y: a.y, size, font, color, rotate: degrees(a.rotate) });
+  }
+  if (el.bold) page.pushOperators(PDFOperator.of('Tr', [doc.context.obj(0)]));
+  const thick = Math.max(0.5, size * 0.06);
+  const vline = (x, top, bottom) => {
+    const p1 = g.toPdf(x, top), p2 = g.toPdf(x, bottom);
+    page.drawLine({ start: { x: p1[0], y: p1[1] }, end: { x: p2[0], y: p2[1] }, thickness: thick, color });
+  };
+  for (const col of columns.values()) {
+    if (el.underline) vline(col.cx - size * 0.62, col.top, col.bottom);
+    if (el.strike) vline(col.cx, col.top, col.bottom);
+  }
+}
+
 /** 依寬度斷行（中文逐字、英文在空白處），和瀏覽器 pre-wrap + overflow-wrap:anywhere 的結果相近 */
 export function wrapLines(font, text, size, maxW) {
   const out = [];
@@ -147,6 +194,7 @@ function drawTextElement(doc, page, g, el, fontInfo) {
   if (el.patch) drawBox(page, g, el.patch, el.patch.color || '#ffffff');   // 先蓋掉原本那行字
   if (el.bgColor) drawBox(page, g, el, el.bgColor);
   if (!el.text) return;
+  if (el.vertical) { drawVertical(doc, page, g, el, fontInfo); return; }
   drawLines(doc, page, g, el.x, el.y, {
     text: fontInfo.text, size: el.size, lineHeight: el.lineHeight, color: el.color, bold: el.bold,
     underline: el.underline, strike: el.strike, align: el.align, width: el.w, maxW: el.maxW,

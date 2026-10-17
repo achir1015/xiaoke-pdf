@@ -30,7 +30,7 @@ export class App {
     this.session = new EditSession();
     this.renderer = new PdfRenderer();
     this.tool = 'select';
-    this.textDefaults = { font: 'huninn', size: 16, color: '#1d1f23' };
+    this.textDefaults = { font: 'huninn', size: 16, color: '#1d1f23', vertical: false };
     this.tableDefaults = { rows: 3, cols: 3 };
     this.$ = (sel) => document.querySelector(sel);
 
@@ -173,7 +173,10 @@ export class App {
 
   createText(pageIndex, p) {
     const d = this.textDefaults;
-    const el = new TextElement({ pageIndex, x: p.x, y: p.y - d.size * 0.65, text: '', font: d.font, size: d.size, color: d.color });
+    const el = d.vertical
+      // 直書：點的位置是第一個字的中心，右緣固定、往左長
+      ? new TextElement({ pageIndex, x: p.x - d.size * 0.65, y: p.y - d.size * 0.5, w: d.size * 1.3, vRight: p.x + d.size * 0.65, text: '', font: 'huninn', size: d.size, color: d.color, vertical: true })
+      : new TextElement({ pageIndex, x: p.x, y: p.y - d.size * 0.65, text: '', font: d.font, size: d.size, color: d.color });
     this.session.add(el);
     this.view.justCreatedId = el.id;
     this.view.beginEdit(el.id);
@@ -184,6 +187,7 @@ export class App {
    * 在表格裡：同一格的幾行一起編輯，新文字在格子寬度內自動換行，不會跨到隔壁格。
    */
   replaceLine(pageIndex, line) {
+    if (line.vertical) { this._replaceColumn(pageIndex, line); return; }
     const cell = this.view.cellAt(pageIndex, line);
     let lines = [line];
     if (cell) {
@@ -225,6 +229,23 @@ export class App {
       const e = this.session.get(el.id);
       e.cellPad = Math.max(1, cell.y2 - (e.y + e.h));
     }
+  }
+
+  /** 「改原文字」點到直書的一行：蓋掉原字，放一段直書的新文字，中心線對齊原本那一行 */
+  _replaceColumn(pageIndex, line) {
+    const sampled = this.sampleColor(pageIndex, line);
+    const size = Math.round(line.size * 10) / 10;
+    const lineHeight = 1.3;
+    const pad = Math.max(1, size * 0.08);
+    const x = line.cx - (size * lineHeight) / 2;
+    const el = new TextElement({
+      pageIndex, x, y: line.y, w: size * lineHeight, vRight: x + size * lineHeight,
+      text: line.text, font: 'huninn', size, lineHeight, vertical: true,
+      color: sampled?.ink || '#1d1f23',
+      patch: { x: line.x - pad, y: line.y - pad, w: line.w + pad * 2, h: line.h + pad * 2, color: sampled?.bg || '#ffffff' },
+    });
+    this.session.add(el, '修改原文字');
+    this.view.beginEdit(el.id);
   }
 
   /** 框選（或點一下）建立遮蓋、連結、影音、圖片 */
@@ -270,7 +291,7 @@ export class App {
     if (!el) return;
     const c = el.clone();
     c.id = undefined;
-    const copy = new el.constructor({ ...c, x: el.x + 12, y: el.y + 12, id: undefined });
+    const copy = new el.constructor({ ...c, x: el.x + 12, y: el.y + 12, id: undefined, vRight: el.vRight != null ? el.vRight + 12 : null });
     this.session.add(copy, '複製' + el.label);
     this.view.select(copy.id);
   }

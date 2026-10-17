@@ -94,5 +94,12 @@ export function formatBytes(n) {
  * 會造成搜尋比對失敗或新字型缺字。只轉換這兩個區段，全形標點不受影響。
  */
 export function normalizeCjk(s) {
-  return String(s).replace(/[⺀-⻿⼀-⿟]/g, ch => ch.normalize('NFKC'));
+  return String(s).replace(/[\u2E80-\u2EFF\u2F00-\u2FDF]/g, ch => RADICAL_SUPPLEMENT[ch] || ch.normalize('NFKC'));
 }
+
+/** 「部首補充」區沒有標準對應（NFKC 不會轉），常見的手動對應回一般漢字 */
+const RADICAL_SUPPLEMENT = {
+  '⺟': '母', '⺠': '民', '⻁': '虎', '⻄': '西', '⻑': '長', '⻘': '青', '⻝': '食', '⻣': '骨', '⻤': '鬼',
+  // 簡化字形的部首對應到簡體字
+  '⻅': '见', '⻆': '角', '⻈': '讠', '⻔': '门', '⻢': '马', '⻩': '黄', '⻬': '齐', '⻮': '齿', '⻰': '龙', '⻳': '龟',
+};

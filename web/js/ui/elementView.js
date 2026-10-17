@@ -92,8 +92,11 @@ function styleText(node, el, z, editing, linkEl) {
   st.textDecorationThickness = Math.max(1, el.size * 0.06 * z) + 'px';
   st.textUnderlineOffset = el.size * 0.12 * z + 'px';
   node.style.width = ''; node.style.height = '';
+  // 直書：由上往下、由右往左；中文直立，英數字轉 90 度（瀏覽器預設的 mixed）
+  st.writingMode = el.vertical ? 'vertical-rl' : '';
+  st.textUnderlinePosition = el.vertical ? 'left' : '';
   // 表格儲存格裡的文字：固定寬度、自動換行（和匯出 PDF 的換行一致）
-  if (el.maxW) { st.whiteSpace = 'pre-wrap'; st.overflowWrap = 'anywhere'; st.width = el.maxW * z + 'px'; }
+  if (el.maxW && !el.vertical) { st.whiteSpace = 'pre-wrap'; st.overflowWrap = 'anywhere'; st.width = el.maxW * z + 'px'; }
   else { st.whiteSpace = ''; st.overflowWrap = ''; st.width = ''; }
   if (!editing && c.textContent !== el.text) c.textContent = el.text;
   c.contentEditable = editing ? 'plaintext-only' : 'false';
@@ -102,6 +105,12 @@ function styleText(node, el, z, editing, linkEl) {
   const target = linkEl || el;
   target.w = Math.max(4, c.offsetWidth / z);
   target.h = Math.max(el.size * el.lineHeight, c.offsetHeight / z);
+  if (el.vertical && !linkEl) {
+    // 直書：右緣固定（多一行時往左長）。右緣是衍生資料，第一次量測時記下
+    if (target.vRight == null) target.vRight = target.x + target.w;
+    else target.x = target.vRight - target.w;
+    node.style.left = target.x * z + 'px';
+  } else if (!linkEl) target.vRight = null;
 }
 
 function updateMedia(node, el, z, dpr) {

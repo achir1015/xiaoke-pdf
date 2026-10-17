@@ -85,6 +85,13 @@ export class FontLibrary {
     return { text: out, missing: [...missing] };
   }
 
+  /** 粉圓字型有沒有這個字（字型還沒載入時當作沒有） */
+  hasGlyph(ch) {
+    if (!this.huninnBytes) return false;
+    if (!this._fk) this._fk = fontkit.create(this.huninnBytes);
+    return this._fk.hasGlyphForCodePoint(ch.codePointAt(0));
+  }
+
   /** 只保留 text 用到的字，回傳一個小小的 TrueType 字型 */
   async subsetHuninn(text) {
     const full = await this.loadHuninn();

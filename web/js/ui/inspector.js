@@ -93,6 +93,7 @@ export class Inspector {
     if (tool === 'text') {
       const d = this.app.textDefaults;
       node.append(h('h3', {}, '新文字的預設樣式'),
+        field('方向', segmented([['h', '橫書'], ['v', '直書']], d.vertical ? 'v' : 'h', v => (d.vertical = v === 'v')), '直書：由上往下、由右往左，使用粉圓字型。'),
         field('字型', this._fontSelect(d.font, v => (d.font = v))),
         field('字級', slider(6, 96, 1, d.size, v => (d.size = v), v => v + ' pt')),
         field('顏色', colorPicker(d.color, v => (d.color = v))));
@@ -129,10 +130,22 @@ export class Inspector {
       const U = toggle('<u>U</u>', el.underline, v => upd({ underline: v }, '底線'), '底線');
       const S = toggle('<s>S</s>', el.strike, v => upd({ strike: v }, '刪除線'), '刪除線');
       const align = segmented([['left', '靠左'], ['center', '置中'], ['right', '靠右']], el.align, v => upd({ align: v }, '對齊'));
+      // 直書／橫書：直書一律用粉圓字型（標準英文字型沒有直書資訊）
+      const dir = segmented([['h', '橫書'], ['v', '直書']], el.vertical ? 'v' : 'h', v => {
+        const vertical = v === 'v';
+        upd(vertical ? { vertical, font: 'huninn' } : { vertical }, vertical ? '改成直書' : '改成橫書');
+        this.app.textDefaults.vertical = vertical;
+      });
+      const alignLabels = (vertical) => {
+        const t = vertical ? ['靠上', '置中', '靠下'] : ['靠左', '置中', '靠右'];
+        align.querySelectorAll('.seg-btn').forEach((b, k) => { b.textContent = t[k]; });
+      };
+      alignLabels(el.vertical);
       const lh = h('select', { onchange: () => upd({ lineHeight: +lh.value }, '行高') },
         ...[1, 1.15, 1.3, 1.5, 1.8, 2].map(v => h('option', { value: v, selected: v === el.lineHeight }, v === 1.3 ? '1.3（預設）' : String(v))));
       node.append(
         field('內容', ta, '也可以在頁面上雙擊文字直接修改。'),
+        field('方向', dir),
         field('字型', font),
         field('字級', size),
         field('文字顏色', color),
@@ -140,7 +153,8 @@ export class Inspector {
         field('對齊', align),
         field('行高', lh),
         h('label', { class: 'check' }, bgOn, '文字背景色'), bg);
-      syncs.push(e => { if (document.activeElement !== ta) ta.value = e.text; font.value = e.font; size.set(e.size); color.set(e.color); bgOn.checked = !!e.bgColor; if (e.bgColor) bg.set(e.bgColor); B.set(e.bold); U.set(e.underline); S.set(e.strike); align.set(e.align); lh.value = e.lineHeight; });
+      syncs.push(e => { if (document.activeElement !== ta) ta.value = e.text; font.value = e.font; size.set(e.size); color.set(e.color); bgOn.checked = !!e.bgColor; if (e.bgColor) bg.set(e.bgColor); B.set(e.bold); U.set(e.underline); S.set(e.strike); align.set(e.align); lh.value = e.lineHeight; dir.set(e.vertical ? 'v' : 'h'); alignLabels(e.vertical); font.disabled = !!e.vertical; });
+      font.disabled = !!el.vertical;
       if (el.patch) {
         const pc = colorPicker(el.patch.color || '#ffffff', v => upd({ patch: { ...s.get(id).patch, color: v } }, '遮蓋顏色', 'patch:' + id), ['#ffffff', '#f5f5f5', '#fffde7', '#1d1f23']);
         node.append(h('h3', {}, '原文字遮蓋'),

@@ -56,9 +56,20 @@ export class TextElement extends PageElement {
     this.patch = o.patch ? { ...o.patch } : null;
     // 自動換行的寬度（pt）；null＝不換行。表格儲存格裡的文字用格子寬度
     this.maxW = o.maxW ?? null;
+    // 直書（由上往下、由右往左）。直書時 align 的意思是：left＝靠上、center＝置中、right＝靠下
+    this.vertical = !!o.vertical;
+    // 直書時記住「右緣」：多打一行時往左長，第一行不會跟著移動
+    this.vRight = o.vRight ?? null;
   }
   get resizable() { return false; }           // 文字大小由字級決定，寬高自動量測
   get label() { return this.patch ? '修改的文字' : '文字'; }
+  /** 移動直書文字時，右緣跟著移動 */
+  with(changes) {
+    const c = super.with(changes);
+    if ('x' in changes && !('vRight' in changes) && this.vRight != null) c.vRight = this.vRight + (changes.x - this.x);
+    if ('vertical' in changes && changes.vertical !== this.vertical) c.vRight = null;   // 切換直／橫書：重新量
+    return c;
+  }
   get lines() { return String(this.text).split('\n'); }
 }
 
