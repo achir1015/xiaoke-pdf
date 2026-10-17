@@ -11,7 +11,7 @@ PDF 閱讀與編輯工具，有 **Android App** 與 **免安裝網頁版** 兩�
 
 **👉 [開啟小柯文件PDF助手網頁版](https://achir1015.github.io/xiaoke-pdf/)**
 
-（如果上面的網址還打不開，代表倉庫的 GitHub Pages 還沒開啟，可以先用這個網址：**[直接從 GitHub 執行](https://raw.githack.com/achir1015/xiaoke-pdf/gh-pages/index.html)**，內容一樣，都是讀 `gh-pages` 分支的檔案。）
+（GitHub Pages 已開啟，請用上面的正式網址。備用網址 **[raw.githack](https://raw.githack.com/achir1015/xiaoke-pdf/gh-pages/index.html)** 也是讀 `gh-pages` 分支，但它有快取，**更新後可能要等一段時間才會是新版**，所以只在正式網址打不開時使用。）
 
 打開網頁、把 PDF 拖進去就能編輯，改好按「下載 PDF」。檔案全程在你的瀏覽器裡處理，**不會上傳**。
 
