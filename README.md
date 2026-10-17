@@ -19,7 +19,7 @@ PDF 閱讀與編輯工具，有 **Android App** 與 **免安裝網頁版** 兩�
 
 | 工具 | 可以做什麼 |
 |---|---|
-| ✏️ **改原文字** | 原本的文字會用藍框標出，點一下那一行就能直接改。**直書（由上往下）的文字也可以**：瀏覽器列印、Word 匯出、直書字型三種直書 PDF 都認得，改完仍是直書。下載時舊字會從檔案裡真正刪除（不只是蓋住），搜尋、複製都不會再出現 |
+| ✏️ **改原文字** | 原本的文字會用藍框標出，點一下那一行就能直接改。**直書（由上往下）的文字也可以**：瀏覽器列印、Word 匯出、直書字型三種直書 PDF 都認得，改完仍是直書。下載時舊字會從檔案裡真正刪除（不只是蓋住），搜尋、複製都不會再出現。**讀不到文字的頁面**（掃描檔，或 WPS 匯出時把字轉成外框圖形）可以按「文字辨識（OCR）」把字找出來再修改，直書、橫書都支援 |
 | 🔤 **新增文字** | 中文使用內建的 jf open 粉圓字型，存檔後是可以搜尋、複製的真正文字；橫書／直書、字級、顏色、背景色、粗體、底線、刪除線、對齊、行高。直書時中文直立、英數字橫躺、括號自動換成直書字形 |
 | 🩹 **遮蓋** | 像修正帶一樣框出要蓋掉的區域，可以從頁面取樣背景色 |
 | 🔗 **網址連結** | 點一下插入可點擊的文字連結；框選則在原本的字上加一塊透明點擊區。自動補 `https://`，中文網址自動轉碼，也支援 Email、電話 |
@@ -180,4 +180,5 @@ python build.py
 | [pdf-lib](https://github.com/Hopding/pdf-lib) 1.17 ＋ [fontkit](https://github.com/Hopding/fontkit) | 寫入 PDF | MIT |
 | [HarfBuzz](https://github.com/harfbuzz/harfbuzzjs)（harfbuzzjs 1.6） | 中文字型子集化（只嵌入用到的字） | MIT |
 | [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0 | 影音卡片的 QR Code | MIT |
+| [Tesseract.js](https://github.com/naptha/tesseract.js) 6.0 ＋ 繁體中文辨識資料 | OCR 文字辨識（第一次使用時才下載） | Apache 2.0 |
 | [pako](https://github.com/nodeca/pako) 2.1 | fontkit 的解壓縮 | MIT ／ Zlib |

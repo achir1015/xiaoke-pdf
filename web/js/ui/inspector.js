@@ -103,10 +103,31 @@ export class Inspector {
       const num = (v, min, max, set) => h('input', { type: 'number', min, max, value: v, inputmode: 'numeric', onchange: (e) => set(Math.max(min, Math.min(max, Math.round(+e.target.value) || v))) });
       node.append(field('列數', num(d.rows, 1, 50, v => (d.rows = v))), field('欄數', num(d.cols, 1, 20, v => (d.cols = v))));
     }
-    if (tool === 'edittext' && this.app.view.hitsOn && !this.app.view.shells.some(s => s.lines?.length)) {
-      node.append(h('div', { class: 'note warn' }, '這份文件讀不到文字（可能是掃描檔或圖片）。可以改用「遮蓋」蓋掉原字，再用「新增文字」寫上新內容。'));
-    }
+    if (tool === 'edittext' && this.app.view.hitsOn) node.append(this._ocrSection());
     return { node };
+  }
+
+  /** 改原文字面板裡的 OCR 區塊：頁面沒有文字時特別提醒 */
+  _ocrSection() {
+    const app = this.app, view = app.view;
+    const cur = view.currentPage || 0;
+    const native = (s) => (s.lines || []).filter(l => !l.ocr).length;
+    const noTextAnywhere = !view.shells.some(s => native(s));
+    const curNoText = !native(view.shells[cur] || {});
+    const done = app.renderer.ocr.has(cur);
+    let dir = 'auto';
+    const wrap = h('section', { class: 'wm-sec' },
+      h('b', {}, '文字辨識（OCR）'),
+      curNoText
+        ? h('p', { class: 'muted small' }, noTextAnywhere
+          ? '這份文件讀不到文字：字可能是掃描的圖片，或匯出時被轉成了「外框圖形」（WPS 常見）。用文字辨識把字找出來，就能點選修改。'
+          : `第 ${cur + 1} 頁讀不到文字，可以用文字辨識把字找出來。`)
+        : h('p', { class: 'muted small' }, '頁面上有些字沒有藍框？可能是圖片裡的字，可以用文字辨識找出來。'),
+      field('文字方向', segmented([['auto', '自動判斷'], ['vertical', '直書'], ['horizontal', '橫書']], dir, v => (dir = v))),
+      h('button', { type: 'button', class: 'btn primary block', onclick: () => app.ocrPages([view.currentPage || 0], dir) }, done ? `重新辨識第 ${cur + 1} 頁` : `辨識第 ${cur + 1} 頁`),
+      view.shells.length > 1 ? h('button', { type: 'button', class: 'btn block', onclick: () => app.ocrPages(view.shells.map(s => s.index), dir) }, `辨識全部 ${view.shells.length} 頁`) : null,
+      h('p', { class: 'muted small' }, '辨識在你的瀏覽器裡進行，頁面不會上傳。第一次使用需要下載約 6 MB 的辨識程式，每頁約 10～30 秒。辨識難免有錯字，點選後請在編輯框裡確認。'));
+    return wrap;
   }
 
   // ================================================================ 貼紙設定

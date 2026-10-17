@@ -15,6 +15,7 @@ export class PdfRenderer {
     this.doc = null;
     this._pages = new Map();
     this._text = new Map();
+    this.ocr = new Map();     // 頁碼 → OCR 辨識出的文字行（換底稿時保留，開新檔時清空）
   }
 
   get pageCount() { return this.doc ? this.doc.numPages : 0; }
@@ -88,6 +89,10 @@ export class PdfRenderer {
    * ③ 要靠「離上下鄰居比較近、還是離左右鄰居比較近」來判斷。
    */
   async textLines(i) {
+    return [...await this._pdfTextLines(i), ...(this.ocr.get(i) || [])];
+  }
+
+  async _pdfTextLines(i) {
     if (this._text.has(i)) return this._text.get(i);
     const p = await this.page(i);
     const vp = p.getViewport({ scale: 1 });

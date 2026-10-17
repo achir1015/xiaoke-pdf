@@ -23,5 +23,6 @@ export async function busy(message, fn) {
   mask.querySelector('span:last-child').textContent = message;
   document.body.appendChild(mask);
   await new Promise(r => requestAnimationFrame(() => setTimeout(r, 30)));   // 先讓遮罩畫出來
-  try { return await fn(); } finally { mask.remove(); }
+  const label = mask.querySelector('span:last-child');
+  try { return await fn((m) => { label.textContent = m; }); } finally { mask.remove(); }
 }

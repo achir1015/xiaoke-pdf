@@ -22,6 +22,7 @@ import { Inspector, TOOL_INFO } from './inspector.js';
 import { ICONS, LOGO } from './icons.js';
 import { toast, busy } from './toast.js';
 import { pickFile } from './dom.js';
+import { recognize, guessDirection, OCR_SCALE } from '../pdf/ocr.js';
 
 const TOOL_ORDER = ['select', 'edittext', 'text', 'table', 'cover', 'link', 'media', 'image', '|', 'watermark', 'unwatermark'];
 
@@ -117,6 +118,7 @@ export class App {
     }
     this.$('#empty').hidden = true;
     fonts.loadHuninn().catch(() => toast('中文字型下載失敗，請檢查網路後重新整理', 'warn', 6000));
+    this.renderer.ocr.clear();
     this.session.open(file.name, bytes);
     this.setTool('select');
   }
@@ -229,6 +231,40 @@ export class App {
       const e = this.session.get(el.id);
       e.cellPad = Math.max(1, cell.y2 - (e.y + e.h));
     }
+  }
+
+  /**
+   * OCR：辨識頁面上「畫出來的字」（掃描檔、字被轉成外框的 PDF），之後就能像一般文字一樣點選修改
+   * @param {number[]} pages 要辨識的頁（0 起算）
+   * @param {'auto'|'vertical'|'horizontal'} direction
+   */
+  async ocrPages(pages, direction = 'auto') {
+    let found = 0;
+    try {
+      await busy('準備文字辨識…', async (say) => {
+        for (const [n, i] of pages.entries()) {
+          const head = pages.length > 1 ? `第 ${i + 1} 頁（${n + 1}/${pages.length}）` : `第 ${i + 1} 頁`;
+          say(`${head}：準備頁面…`);
+          const canvas = document.createElement('canvas');
+          await this.renderer.render(i, canvas, OCR_SCALE);
+          const dir = direction === 'auto' ? guessDirection(canvas) : direction;
+          const lines = await recognize(canvas, dir, (m) => {
+            if (m.status === 'recognizing text') say(`${head}：辨識${dir === 'vertical' ? '直書' : '橫書'}文字 ${Math.round(m.progress * 100)}%`);
+            else if (/load|initializ/.test(m.status)) say('第一次使用，正在下載文字辨識程式（約 6 MB）…');
+          });
+          this.renderer.ocr.set(i, lines);
+          found += lines.length;
+        }
+      });
+    } catch (e) {
+      console.error(e);
+      toast('文字辨識失敗：' + (e.message || e), 'error', 8000);
+      return;
+    }
+    if (this.tool !== 'edittext') this.setTool('edittext');
+    await this.view.setHitsEnabled(true);
+    this.inspector.render(true);
+    toast(found ? `辨識出 ${found} 行文字。點藍框就能修改；辨識可能有錯字，請在編輯框裡修正。` : '沒有辨識出文字', found ? 'ok' : 'warn', 6000);
   }
 
   /** 「改原文字」點到直書的一行：蓋掉原字，放一段直書的新文字，中心線對齊原本那一行 */
@@ -564,7 +600,12 @@ export class App {
 
   onSelect() { this.inspector.render(); }
   onZoom(z) { this.$('#zoom-label').textContent = Math.round(z * 100) + '%'; }
-  onPageChange(i) { const inp = this.$('#page-input'); if (document.activeElement !== inp) inp.value = i + 1; }
+  onPageChange(i) {
+    const inp = this.$('#page-input');
+    if (document.activeElement !== inp) inp.value = i + 1;
+    // 「改原文字」面板的「辨識第 N 頁」跟著目前頁碼
+    if (this.tool === 'edittext' && !this.view.selectedId) this.inspector.render(true);
+  }
 
   _updateHistory() {
     const s = this.session;
