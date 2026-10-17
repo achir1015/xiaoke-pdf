@@ -1,0 +1,32 @@
+{
+  "name": "小柯文件PDF線上版",
+  "short_name": "小柯PDF",
+  "description": "在瀏覽器裡閱讀、編輯、註解、填寫、簽署與整理 PDF，檔案不會上傳。",
+  "lang": "zh-Hant-TW",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F3F4F6",
+  "theme_color": "#1E63E9",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "file_handlers": [
+    { "action": "./", "accept": { "application/pdf": [".pdf"] } }
+  ],
+  "share_target": {
+    "action": "./?share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": { "files": [{ "name": "pdf", "accept": ["application/pdf", ".pdf"] }] }
+  },
+  "shortcuts": [
+    { "name": "開啟 PDF", "short_name": "開啟", "url": "./?action=open", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "合併檔案", "short_name": "合併", "url": "./?action=combine", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

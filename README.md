@@ -69,6 +69,18 @@ web/
 
 **發佈**：推到 `main` 後，GitHub Actions（`.github/workflows/pages.yml`）會把 `web/` 和中文字型組合好推到 `gh-pages` 分支。第一次使用請到倉庫的 **Settings → Pages**，Source 選 **Deploy from a branch**、Branch 選 **gh-pages / (root)**，按 Save。
 
+## 🌐 完整版線上版（小柯文件PDF線上版）
+
+**[👉 開啟完整版線上版](https://achir1015.github.io/xiaoke-pdf/online/)** — 功能與 Android App 相同（閱讀、註解、填表、簽署、整理頁面、合併分割、加密、塗銷、加／去浮水印…），手機、平板、電腦的瀏覽器都能用。
+
+<img src="release/qr-web.png" width="180" alt="手機掃描開啟完整版線上版">
+
+- **像 Word 一樣編輯**：按「編輯」→ 點一下頁面上的文字，原本的位置就變成編輯框，游標在你點的地方，直接打字；整段文字會自動換行，舊字會從檔案裡真正刪除。上方格式列可以改字型、大小、粗體、底線、刪除線、文字顏色、背景色。點空白處可以直接新增文字。
+- **檔案不會上傳**：所有處理都在瀏覽器裡完成（pdf.js、pdf-lib），網站只提供程式本身。
+- **安裝到主畫面 / 建立捷徑**：Android Chrome「⋮ → 加到主畫面 / 安裝應用程式」；iPhone Safari「分享 → 加入主畫面」；電腦版 Chrome / Edge 按網址列的「安裝」圖示。安裝後有小柯機器人圖示，離線也能用。
+- **更新通知**：網站有新版時，畫面上方會出現「有新版本」通知，按「立即更新」即可。
+- 程式在 `docs/`（不需要編譯，函式庫都放在 `docs/vendor/`）；在自己電腦上執行：`python -m http.server 8000 -d docs`，再打開 <http://localhost:8000/>。發佈時由同一個 GitHub Actions 放到 `gh-pages` 分支的 `online/`。
+
 ## 📱 Android App
 
 ### 📲 下載安裝（Android 7.0 以上）

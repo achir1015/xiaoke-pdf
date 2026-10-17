@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'web/**'
+      - 'docs/**'
       - 'assets/fonts/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
@@ -28,6 +29,9 @@ jobs:
           mkdir -p _site/fonts
           cp -r web/. _site/
           cp assets/fonts/jf-openhuninn-2.1.ttf assets/fonts/jf-openhuninn-OFL.txt _site/fonts/
+          # 完整版線上版（docs/）放在 online/，不含 README 用的截圖與測試檔
+          mkdir -p _site/online
+          (cd docs && cp -r index.html app.css manifest.webmanifest sw.js version.json favicon.ico icons js vendor fonts ../_site/online/)
           touch _site/.nojekyll
 
       - name: 推到 gh-pages 分支
