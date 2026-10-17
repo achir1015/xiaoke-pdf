@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>小柯文件PDF線上版</title>
+  <meta name="description" content="在瀏覽器裡閱讀、編輯、註解、填寫、簽署與整理 PDF。檔案不會上傳，全部在你的裝置上處理。">
+  <meta name="theme-color" content="#1E63E9">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="小柯PDF">
+  <meta name="application-name" content="小柯PDF">
+  <!-- 網址列小圖示 -->
+  <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+  <!-- 加到主畫面 / 建立捷徑的圖示 -->
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="app">
+    <header id="top">
+      <div id="tabs" class="tabs"></div>
+      <div id="toolbar" class="toolbar"></div>
+      <div id="searchbar" class="toolbar hidden"></div>
+      <div id="hint" class="hint hidden"></div>
+      <div id="update" class="update hidden"></div>
+    </header>
+    <main id="main"></main>
+    <footer id="bottom">
+      <div id="toolstrip" class="toolstrip hidden"></div>
+      <nav id="nav" class="nav hidden"></nav>
+    </footer>
+  </div>
+  <div id="layer"></div>
+  <noscript>這個網頁需要 JavaScript 才能使用。</noscript>
+
+  <script src="vendor/pdfjs/pdf.min.js"></script>
+  <script src="vendor/pdf-lib.min.js"></script>
+  <script src="vendor/fontkit.umd.min.js"></script>
+  <script src="vendor/forge.min.js" defer></script>
+  <script src="vendor/jszip.min.js" defer></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

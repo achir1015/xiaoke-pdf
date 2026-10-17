@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>小柯文件PDF助手</title>
+<meta name="description" content="免安裝的線上 PDF 編輯工具：修改文字、插入網址與影音、加上或去除浮水印。全部在瀏覽器處理，檔案不上傳。">
+<meta name="theme-color" content="#1E63E9">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<!-- 第三方函式庫的網址集中在這裡（固定版本，避免哪天自動升級壞掉） -->
+<script type="importmap">
+{
+  "imports": {
+    "pdfjs-dist": "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/legacy/build/pdf.min.mjs",
+    "pdfjs-dist/worker": "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/legacy/build/pdf.worker.min.mjs",
+    "pdfjs-dist/": "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/",
+    "pdf-lib": "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.esm.min.js",
+    "@pdf-lib/fontkit": "https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.es.min.js",
+    "pako": "https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.esm.mjs",
+    "qrcode-generator": "https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/dist/qrcode.mjs",
+    "harfbuzz-subset.wasm": "https://cdn.jsdelivr.net/npm/harfbuzzjs@1.6.3/dist/harfbuzz-subset.wasm"
+  }
+}
+</script>
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div id="brand" class="brand"></div>
+    <div id="doc-name" class="doc-name"></div>
+    <div class="top-actions">
+      <button id="btn-undo" class="icon-btn" type="button" disabled aria-label="復原"></button>
+      <button id="btn-redo" class="icon-btn" type="button" disabled aria-label="重做"></button>
+      <button id="btn-paste" class="icon-btn" type="button" aria-label="貼上" title="貼上（Ctrl+V）：先在頁面上點一下要放的位置"></button>
+      <button id="btn-open" class="btn" type="button"><span class="lbl">開啟 PDF</span></button>
+      <button id="btn-download" class="btn primary" type="button" disabled><span class="lbl">下載 PDF</span></button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <nav id="tools" class="tools" aria-label="工具"></nav>
+
+    <main class="stage">
+      <div id="viewport" class="viewport">
+        <section id="empty" class="empty">
+          <div class="empty-card">
+            <div class="empty-illus" aria-hidden="true">
+              <svg viewBox="0 0 120 120" width="112" height="112"><rect x="22" y="10" width="66" height="88" rx="8" fill="#fff" stroke="#C9D8FA" stroke-width="3"/><path d="M70 10v18h18" fill="#E3ECFD" stroke="#C9D8FA" stroke-width="3" stroke-linejoin="round"/><rect x="32" y="26" width="26" height="12" rx="3" fill="#E53935"/><path d="M34 50h44M34 60h44M34 70h30" stroke="#B7C3D6" stroke-width="4" stroke-linecap="round"/><circle cx="88" cy="88" r="22" fill="#1E63E9"/><path d="M88 78v20M78 88l10 10 10-10" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h1>把 PDF 拖到這裡</h1>
+            <p>或</p>
+            <button id="empty-open" class="btn primary big" type="button">選擇 PDF 檔案</button>
+            <ul class="feature-list">
+              <li><b>改文字</b>點一下原本的字就能修改，也能新增中文字</li>
+              <li><b>插網址</b>可點擊的文字連結或透明點擊區</li>
+              <li><b>放影音</b>YouTube、影片網址或直接嵌入影音檔</li>
+              <li><b>浮水印</b>加上文字／圖片浮水印，或把浮水印去掉</li>
+            </ul>
+            <p class="privacy-line">🔒 檔案只在你的瀏覽器裡處理，不會上傳到任何伺服器</p>
+          </div>
+        </section>
+      </div>
+      <footer class="statusbar">
+        <span class="pager">第 <input id="page-input" type="number" min="1" value="1" aria-label="頁碼"> / <span id="page-total">0</span> 頁</span>
+        <span class="zoom">
+          <button id="zoom-out" class="icon-btn small" type="button" aria-label="縮小"></button>
+          <span id="zoom-label">100%</span>
+          <button id="zoom-in" class="icon-btn small" type="button" aria-label="放大"></button>
+          <button id="zoom-fit" class="icon-btn small" type="button" aria-label="符合寬度" title="符合寬度（Ctrl+0）"></button>
+        </span>
+      </footer>
+    </main>
+
+    <aside class="sidebar" aria-label="屬性">
+      <button id="sheet-close" class="icon-btn sheet-close" type="button" aria-label="收起"></button>
+      <div id="inspector" class="inspector"></div>
+    </aside>
+  </div>
+
+  <div class="drop-mask" aria-hidden="true"><div>放開以開啟 PDF</div></div>
+  <noscript>需要開啟 JavaScript 才能使用。</noscript>
+</body>
+</html>
