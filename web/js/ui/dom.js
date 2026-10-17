@@ -7,7 +7,7 @@ export function h(tag, attrs = {}, ...children) {
     else if (k === 'class') el.className = v;
     else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
     else if (k === 'html') el.innerHTML = v;
-    else if (k in el && typeof v !== 'string') el[k] = v;
+    else if (k === 'value' || (k in el && typeof v !== 'string')) el[k] = v;   // textarea 的內容要用屬性設定
     else el.setAttribute(k, v === true ? '' : v);
   }
   for (const c of children.flat()) {

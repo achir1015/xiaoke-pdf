@@ -267,3 +267,10 @@ audio.media-player { background: #16213A; padding: 0 6px; height: 100%; }
   .toasts { bottom: 90px; }
 }
 @media (min-width: 761px) and (max-width: 1100px) { .workspace { grid-template-columns: 76px 1fr 280px; } }
+
+/* 貼上位置的小標記（點頁面空白處時出現） */
+.paste-mark { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; pointer-events: none; z-index: 4; }
+.paste-mark::before, .paste-mark::after { content: ""; position: absolute; background: var(--accent); border-radius: 1px; }
+.paste-mark::before { left: 8px; top: 0; width: 2px; height: 18px; }
+.paste-mark::after { top: 8px; left: 0; height: 2px; width: 18px; }
+body:not(.has-doc) #btn-paste { display: none; }

@@ -7,7 +7,7 @@
 // 使用者的每個動作（開檔、選工具、新增貼紙、下載）都先到這裡，再交給對的人。
 // =====================================================================
 import { EditSession } from '../domain/session.js';
-import { TextElement, CoverElement, LinkElement, MediaElement, ImageElement } from '../domain/elements.js';
+import { TextElement, CoverElement, LinkElement, MediaElement, ImageElement, normalizeUrl } from '../domain/elements.js';
 import { PdfRenderer } from '../pdf/renderer.js';
 import { fonts } from '../pdf/fonts.js';
 import { exportPdf } from '../pdf/exporter.js';
@@ -43,6 +43,7 @@ export class App {
     this.session.addEventListener('elements', () => { this.view.syncElements(); this._updateTitle(); });
     this.session.addEventListener('history', () => this._updateHistory());
     this._bindKeys();
+    this._bindClipboard();
     this._bindFileDrop();
     window.addEventListener('beforeunload', (e) => { if (this.session.isOpen && this.session.dirty) { e.preventDefault(); e.returnValue = ''; } });
     this.inspector.render();
@@ -69,6 +70,7 @@ export class App {
     bind('#btn-undo', 'undo', () => this.session.undo());
     bind('#btn-redo', 'redo', () => this.session.redo());
     bind('#btn-open', 'open', () => this.openPicker());
+    bind('#btn-paste', 'paste', () => this.pasteFromButton());
     bind('#btn-download', 'download', () => this.download());
     bind('#zoom-out', 'zoomOut', () => this.view.setZoom(this.view.zoom / 1.2));
     bind('#zoom-in', 'zoomIn', () => this.view.setZoom(this.view.zoom * 1.2));
@@ -628,6 +630,104 @@ export class App {
   }
 
   // ================================================================ 鍵盤與拖放
+
+  // ================================================================ 剪貼簿（複製、剪下、貼上）
+  //
+  // 比喻：先在頁面上點一下「放東西的位置」（會出現小標記），再按 Ctrl+V，
+  // 剪貼簿裡的東西就放到那裡：圖片 → 圖片、網址 → 連結、文字 → 文字。
+  // 頁面上選取的貼紙按 Ctrl+C／Ctrl+X，也能貼到別的位置或別頁。
+
+  _bindClipboard() {
+    const typing = (t) => t?.closest?.('input, textarea, select, [contenteditable="true"], [contenteditable="plaintext-only"]');
+    const copySelected = (e, cut) => {
+      if (typing(e.target) || !this.session.isOpen) return;
+      const el = this.session.get(this.view.selectedId);
+      if (!el) return;
+      e.preventDefault();
+      this.clip = el.clone();
+      const text = el.text || el.url || el.label;
+      e.clipboardData.setData('text/plain', text);
+      e.clipboardData.setData('application/x-xiaoke-pdf', el.id);
+      if (cut) this.deleteSelected();
+      toast(cut ? '已剪下，點一下要放的位置再按 Ctrl+V' : '已複製，點一下要放的位置再按 Ctrl+V', 'info', 2500);
+    };
+    document.addEventListener('copy', (e) => copySelected(e, false));
+    document.addEventListener('cut', (e) => copySelected(e, true));
+    document.addEventListener('paste', (e) => {
+      if (typing(e.target)) return;             // 正在打字：照一般方式貼進文字框
+      const cd = e.clipboardData;
+      if (!cd) return;
+      e.preventDefault();
+      const own = cd.getData('application/x-xiaoke-pdf');
+      const images = [...cd.items].filter(it => it.kind === 'file' && /^image\//.test(it.type)).map(it => it.getAsFile()).filter(Boolean);
+      const pdf = [...cd.files].find(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+      this.pasteData({ own, images, pdf, text: cd.getData('text/plain') });
+    });
+  }
+
+  /** 「貼上」按鈕（手機沒有鍵盤時用）：向瀏覽器要剪貼簿內容，第一次會詢問是否允許 */
+  async pasteFromButton() {
+    if (!navigator.clipboard?.read && !navigator.clipboard?.readText) { toast('這個瀏覽器不支援讀取剪貼簿，請改用 Ctrl+V', 'warn'); return; }
+    const images = [];
+    let text = '';
+    try {
+      if (navigator.clipboard.read) {
+        for (const item of await navigator.clipboard.read()) {
+          const img = item.types.find(t => /^image\//.test(t));
+          if (img) images.push(await item.getType(img));
+          else if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+        }
+      } else text = await navigator.clipboard.readText();
+    } catch (e) {
+      toast('無法讀取剪貼簿：請允許瀏覽器存取剪貼簿，或改用 Ctrl+V', 'warn', 6000);
+      return;
+    }
+    const own = this.clip && text && text === (this.clip.text || this.clip.url || this.clip.label) ? this.clip.id : '';
+    this.pasteData({ own, images, text });
+  }
+
+  /** 把剪貼簿的內容放到「貼上位置」 */
+  async pasteData({ own, images = [], pdf, text = '' }) {
+    if (pdf && (!this.session.isOpen || !images.length && !text)) { this.openFile(pdf); return; }
+    if (!this.session.isOpen) { toast('請先開啟一份 PDF', 'warn'); return; }
+    const t = this.view.pasteTarget();
+    if (!t) return;
+    const g = this.session.pages[t.pageIndex];
+    const clampBox = (w, h, x, y) => ({ x: Math.min(Math.max(0, x), Math.max(0, g.width - w)), y: Math.min(Math.max(0, y), Math.max(0, g.height - h)) });
+    let el;
+
+    if (own && this.clip && this.clip.id === own) {
+      // 自己頁面上複製的貼紙
+      const c = this.clip;
+      const pos = t.center && c.pageIndex === t.pageIndex ? { x: c.x + 12, y: c.y + 12 } : clampBox(c.w, c.h, t.center ? t.x - c.w / 2 : t.x, t.center ? t.y - c.h / 2 : t.y);
+      el = new c.constructor({ ...c, id: undefined, pageIndex: t.pageIndex, ...pos, patch: null, vRight: c.vertical ? pos.x + c.w : null });
+    } else if (images.length) {
+      let img;
+      try { img = await normalizeImage(images[0]); } catch (e) { toast('無法讀取剪貼簿裡的圖片', 'error'); return; }
+      const w = Math.min(img.width * 0.75, g.width * 0.6), h = (w * img.height) / img.width;
+      const pos = clampBox(w, h, t.x - w / 2, t.y - h / 2);
+      el = new ImageElement({ pageIndex: t.pageIndex, ...pos, w, h, image: { ...img, url: URL.createObjectURL(new Blob([img.bytes], { type: img.mime })) } });
+    } else if (text.trim()) {
+      const raw = text.replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+      const one = raw.trim();
+      if (!one.includes('\n') && /^(https?:\/\/|www\.)\S+$/i.test(one)) {
+        el = new LinkElement({ pageIndex: t.pageIndex, x: t.x, y: t.y - 10, w: 100, h: 20, text: one, url: normalizeUrl(one) });
+      } else {
+        const d = this.textDefaults;
+        el = d.vertical
+          ? new TextElement({ pageIndex: t.pageIndex, x: t.x - d.size * 0.65, y: t.y - d.size * 0.5, w: d.size * 1.3, vRight: t.x + d.size * 0.65, text: raw, font: 'huninn', size: d.size, color: d.color, vertical: true })
+          : new TextElement({ pageIndex: t.pageIndex, x: t.x, y: t.y - d.size * 0.65, text: raw, font: d.font, size: d.size, color: d.color });
+      }
+    } else {
+      toast('剪貼簿裡沒有可以貼上的文字或圖片', 'warn');
+      return;
+    }
+    this.session.add(el, '貼上' + el.label);
+    if (this.tool !== 'select') { this.tool = 'select'; this.view.pagesEl.dataset.tool = 'select'; this._markTool(); if (this.view.hitsOn) this.view.setHitsEnabled(false); }
+    this.view.select(el.id);
+    // 下一次貼上往右下錯開，連按 Ctrl+V 不會疊在一起
+    if (this.view.pastePoint) this.view.setPastePoint(t.pageIndex, { x: t.x + 14, y: t.y + 14 });
+  }
 
   _bindKeys() {
     document.addEventListener('keydown', (e) => {

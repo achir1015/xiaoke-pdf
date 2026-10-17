@@ -70,6 +70,7 @@ export class DocumentView {
     if (this.fitMode === 'width') this.fitWidth(true); else this._layout();
     if (sameCount) this.scroller.scrollTop = keepScroll * this.scroller.scrollHeight;
     this.shells.forEach(s => this.observer.observe(s.root));
+    this._drawPasteMark();
     this.syncElements();
     this._updateCurrentPage();
   }
@@ -132,6 +133,7 @@ export class DocumentView {
   }
 
   _afterZoom() {
+    this._drawPasteMark();
     this.syncElements();
     this.refreshHits();
     this.renderPreview();
@@ -517,11 +519,46 @@ export class DocumentView {
     // 4) 點在空白處
     if (this.editingId) { this.endEdit(); }
     const p = this._pagePoint(shell, e);
+    this.setPastePoint(shell.index, p);    // 記住位置：之後按 Ctrl+V 就貼在這裡
     if (tool === 'text') { e.preventDefault(); this.app.createText(shell.index, p); return; }
     if (tool === 'table') { e.preventDefault(); this.app.insertTable(shell.index, p); return; }
     if (tool === 'edittext' && this.app.tapBlank(shell.index, p)) { e.preventDefault(); return; }
     if (DRAG_TOOLS.has(tool)) { e.preventDefault(); this._startRubber(e, shell, p, tool); return; }
     if (this.selectedId) this.select(null);
+  }
+
+  // ================================================================ 貼上位置
+
+  /** 記住「貼上位置」，並在頁面上畫一個小標記 */
+  setPastePoint(pageIndex, p) {
+    this.pastePoint = { pageIndex, x: p.x, y: p.y };
+    // 游標還停在右側欄位的話先離開，Ctrl+V 才會貼到頁面上而不是欄位裡
+    const a = document.activeElement;
+    if (a && a !== document.body && a.closest?.('.sidebar, .topbar, .tools')) a.blur();
+    this._drawPasteMark();
+  }
+
+  clearPastePoint() { this.pastePoint = null; this._drawPasteMark(); }
+
+  _drawPasteMark() {
+    this.pagesEl.querySelectorAll('.paste-mark').forEach(m => m.remove());
+    const pp = this.pastePoint;
+    const s = pp && this.shells[pp.pageIndex];
+    if (!s) return;
+    const m = document.createElement('div');
+    m.className = 'paste-mark';
+    m.title = '按 Ctrl+V 或「貼上」會貼在這裡';
+    m.style.left = pp.x * this.zoom + 'px';
+    m.style.top = pp.y * this.zoom + 'px';
+    s.root.appendChild(m);
+  }
+
+  /** 要貼上的位置：點過的位置；沒點過就用目前這一頁的中央 */
+  pasteTarget() {
+    const pp = this.pastePoint;
+    if (pp && this.shells[pp.pageIndex]) return pp;
+    const s = this.shells[this.currentPage || 0];
+    return s ? { pageIndex: s.index, x: s.g.width / 2, y: s.g.height / 2, center: true } : null;
   }
 
   _startMove(e, shell, id) {
