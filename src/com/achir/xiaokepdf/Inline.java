@@ -236,6 +236,13 @@ public final class Inline {
         String b = d.block(Doc.K_EDIT);
         if (b != null) { a.blocked(d, b); return; }
         U.bg.execute(() -> {
+            // 直書的一行：用對話框修改，再以直書寫回原位置
+            Vertical.Column vc = Vertical.columnAt(d.text(page), x, y);
+            if (vc != null) {
+                int[] vcol = colors(d, page, vc.area);
+                U.ui(() -> editVertical(d, page, vc, vcol));
+                return;
+            }
             Cur c = findBlock(d, page, x, y);
             if (c == null) { RectF cell = cellAt(d.rules(page), x, y); U.ui(() -> addIn(d, page, x, y, cell)); return; }
             int[] col = colors(d, page, c.area);
@@ -245,6 +252,28 @@ public final class Inline {
             c.st.color = col[1];
             U.ui(() -> open(c));
         });
+    }
+
+    /** 修改直書的一行：EditText 不能直排，所以在對話框裡改，套用後以直書寫回原位置。 */
+    private void editVertical(Doc d, int page, Vertical.Column col, int[] colors) {
+        LinearLayout l = U.vbox(a);
+        l.setPadding(U.dp(20), U.dp(8), U.dp(20), 0);
+        l.addView(U.text(a, "直書：由上往下排；換行＝往左開新的一行。字太多時會在頁面下緣自動換到左邊一行。", 12, U.SUB));
+        EditText et = U.edit(a, "直書文字", col.text);
+        et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        et.setMinLines(3);
+        et.setGravity(Gravity.TOP | Gravity.START);
+        et.setSelection(et.length());
+        l.addView(et);
+        U.dlg(a).setTitle("修改直書文字").setView(l).setPositiveButton("套用", (x, w) -> {
+            String t = et.getText().toString().replaceAll("\\s+$", "");
+            if (t.equals(col.text)) return;
+            TextStyle st = TextStyle.load(a, "edit");
+            st.size = col.size;
+            st.color = colors[1];
+            st.bg = 0;
+            a.edit(t.trim().isEmpty() ? "刪除文字" : "編輯直書文字", Doc.K_EDIT, pd -> Vertical.replace(pd, d, page, col, t, st, colors[0]));
+        }).setNegativeButton("取消", null).show();
     }
 
     public void addAt(Doc d, int page, float x, float y) {
