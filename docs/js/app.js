@@ -2,14 +2,14 @@
 import { $, el, sheet, choose, prompt, form, confirmBox, alertBox, ask, toast, run, busy, size, download, shareOrDownload, pickFiles, prefs, idb, base, sleep, errText } from './util.js';
 import { Doc, K_EDIT, K_ANNOT, K_FORM } from './doc.js';
 import { Viewer } from './viewer.js';
-import { Tools, TOOLS, byId, pageText } from './tools.js';
+import { Tools, TOOLS, byId, pageText, imageToPng } from './tools.js';
 import * as panels from './panels.js';
 import * as ops from './ops.js';
-import { PALETTE, textPng } from './style.js';
+import { PALETTE, textPng, loadStyle } from './style.js';
 import { loadLib } from './core.js';
 import { Inline } from './inline.js';
 
-export const VERSION = '1.1.1';
+export const VERSION = '1.2.0';
 const REPO = 'achir1015/xiaoke-pdf';
 
 // ================================================================ 搜尋
@@ -195,6 +195,7 @@ class App {
     window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); this.installEvt = e; });
     window.addEventListener('beforeunload', e => { if (this.docs.some(d => d.dirty)) { this.docs.forEach(d => d.persist()); } });
     document.addEventListener('keydown', e => this.onKey(e));
+    this.bindPaste();
     this.setupDrop();
     this.updater.init();
     setInterval(() => this.docs.forEach(d => d.dirty && d.persist()), 60000);
@@ -757,7 +758,7 @@ class App {
       ['編輯文字', () => { this.setMode({ keepStrip: true, hint: '點一下文字就能直接修改（像 Word 一樣）；點空白處可以新增文字', tool: { type: 'point', color: '#1E63E9', onTap: (p, x, y) => this.inline.editAt(p, x, y) } }); mark(0); }],
       ['新增文字', () => { this.setMode({ keepStrip: true, hint: '點一下要加文字的位置，直接打字', tool: { type: 'point', color: '#1E63E9', onTap: (p, x, y) => this.inline.addAt(p, x, y) } }); mark(1); }],
       ['插入表格', () => this.inline.insertTableMode()],
-      ['新增圖片', () => T.addImage()], ['新增連結', () => T.addLink()], ['浮水印', () => T.watermark()], ['移除浮水印', () => T.removeWatermark()],
+      ['新增圖片', () => T.addImage()], ['新增連結', () => T.addLink()], ['貼上', () => this.pasteFromButton()], ['文字辨識 OCR', () => T.ocr()], ['浮水印', () => T.watermark()], ['移除浮水印', () => T.removeWatermark()],
       ['頁首頁尾頁碼', () => T.headerFooter()], ['裁切', () => T.crop()], ['整理頁面', () => { this.exitModes(); T.organize(); }], ['完成', () => this.exitModes()],
     ];
     const mark = k => this.strip(items, k);
@@ -835,6 +836,72 @@ class App {
   }
 
   // ---------------------------------------------------------------- 快速鍵
+
+  // ================================================================ 剪貼簿：Ctrl+V 或「貼上」→ 點一下要放的位置
+
+  bindPaste() {
+    document.addEventListener('paste', e => {
+      const t = e.target;
+      if (t && t.closest && t.closest('input, textarea, select, [contenteditable]')) return;   // 正在打字：照一般方式貼
+      if (!this.doc) return;
+      const cd = e.clipboardData;
+      if (!cd) return;
+      const img = [...cd.items].find(it => it.kind === 'file' && /^image\//.test(it.type));
+      const text = cd.getData('text/plain') || '';
+      if (!img && !text.trim()) return;
+      e.preventDefault();
+      this.pasteData({ image: img && img.getAsFile(), text });
+    });
+  }
+
+  /** 「貼上」按鈕（手機沒有鍵盤時用）：向瀏覽器要剪貼簿內容，第一次會詢問是否允許 */
+  async pasteFromButton() {
+    if (!this.doc) return toast('請先開啟文件');
+    let image = null, text = '';
+    try {
+      if (navigator.clipboard && navigator.clipboard.read) {
+        for (const item of await navigator.clipboard.read()) {
+          const t = item.types.find(x => /^image\//.test(x));
+          if (t) { image = await item.getType(t); break; }
+          if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+        }
+      } else if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
+      else return toast('這個瀏覽器不支援讀取剪貼簿，請改用 Ctrl+V');
+    } catch { return toast('無法讀取剪貼簿：請允許瀏覽器存取剪貼簿，或改用 Ctrl+V', 4000); }
+    if (!image && !text.trim()) return toast('剪貼簿裡沒有可以貼上的文字或圖片');
+    this.pasteData({ image, text });
+  }
+
+  /** 先拿到剪貼簿內容，再請使用者點一下要放的位置：圖片 → 圖片、網址 → 連結、其他 → 文字 */
+  async pasteData({ image, text }) {
+    const d = this.doc;
+    if (!d) return toast('請先開啟文件');
+    const b = d.block(K_EDIT);
+    if (b) return this.blocked(b);
+    if (this.inline && this.inline.active) await this.inline.commit();
+    if (image) {
+      const png = await imageToPng(image, 2000);
+      this.tools.place('點一下要貼上圖片的位置（或拖曳出大小）', png.w / png.h, 200, false, (p, r) => this.edit('貼上圖片', K_EDIT, lib => ops.addImage(lib, p, r, png.png)));
+      return;
+    }
+    const t = text.replace(/\r\n?/g, '\n').trim();
+    const url = !t.includes('\n') && /^(https?:\/\/|www\.)\S+$/i.test(t);
+    const st = loadStyle('add');
+    this.setMode({
+      hint: url ? '點一下要貼上連結的位置' : '點一下要貼上文字的位置（' + (t.length > 12 ? t.slice(0, 12) + '…' : t) + '）',
+      tool: {
+        type: 'point', color: '#1E63E9',
+        onTap: async (p, x, y) => {
+          this.exitModes();
+          const w = Math.max(80, d.pages[p].w - x - 24);
+          await this.edit(url ? '貼上連結' : '貼上文字', K_EDIT, async lib => {
+            const box = await ops.addText(lib, p, { x, y: y - st.size * 0.6, w }, t, st);
+            if (url) await ops.addLink(lib, p, { x: box.x, y: box.y, w: box.w, h: box.h }, /^www\./i.test(t) ? 'https://' + t : t, -1);
+          });
+        },
+      },
+    });
+  }
 
   onKey(e) {
     if (e.key === 'Escape') { if (this.full) return this.fullscreen(false); if (this.exitModes()) return; }

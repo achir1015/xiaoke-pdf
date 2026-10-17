@@ -24,6 +24,7 @@ export class Doc {
     this.pages = [];             // {w, h, rotate, view}
     this.labels = null;
     this.textCache = new Map();
+    this.ocr = new Map();        // 頁 → OCR 辨識出的文字行（字被轉成外框圖形或掃描的頁面）
     this.rulesCache = new Map();
     this.annotCache = new Map();
     this.ocConfig = null;
@@ -92,6 +93,7 @@ export class Doc {
         pages[i + k] = { w: vp.width, h: vp.height, rotate: p.rotate, view: p.view };
       }));
     }
+    if (this.pages && this.pages.length !== pages.length) this.ocr.clear();   // 頁數變了（刪頁、插頁），辨識結果對不上了
     this.pages = pages;
     try { this.labels = await this.pdf.getPageLabels(); } catch { this.labels = null; }
     try { this.ocConfig = await this.pdf.getOptionalContentConfig(); } catch { this.ocConfig = null; }
@@ -222,6 +224,11 @@ export class Doc {
       const vertical = Math.abs(angle) > 0.7;
       const x = tx[4], y = tx[5] - size;
       items.push({ str: it.str, x, y: y - size * 0.15, w: vertical ? size : w, h: vertical ? w : size * 1.3, size, eol: it.hasEOL, font: it.fontName, vertical });
+    }
+    // OCR 辨識出的橫書文字行，和一般文字一樣可以搜尋、選取、就地編輯（直行另外由 vertical.js 處理）
+    for (const l of this.ocr.get(i) || []) {
+      if (l.vertical) continue;
+      items.push({ str: l.text, x: l.x, y: l.baseline - l.size * 1.15, w: l.w, h: l.size * 1.3, size: l.size, eol: true, ocr: true });
     }
     this.textCache.set(i, items);
     return items;

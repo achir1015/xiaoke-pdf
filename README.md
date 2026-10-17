@@ -7,7 +7,7 @@ PDF 閱讀與編輯工具，有 **Android App** 與 **免安裝網頁版** 兩�
 
 <img src="docs/edit-text.png" width="240" alt="編輯文字與格式"> <img src="docs/edited.png" width="240" alt="修改後的文字"> <img src="docs/remove-watermark.png" width="240" alt="移除浮水印">
 
-## 🌐 網頁版（免安裝，電腦、手機都能用）
+## 🌐 網頁版 v1.2.0（免安裝，電腦、手機都能用）
 
 **👉 [開啟小柯文件PDF助手網頁版](https://achir1015.github.io/xiaoke-pdf/)**
 
@@ -69,13 +69,16 @@ web/
 
 **發佈**：推到 `main` 後，GitHub Actions（`.github/workflows/pages.yml`）會把 `web/` 和中文字型組合好推到 `gh-pages` 分支。第一次使用請到倉庫的 **Settings → Pages**，Source 選 **Deploy from a branch**、Branch 選 **gh-pages / (root)**，按 Save。
 
-## 🌐 完整版線上版（小柯文件PDF線上版）
+## 🌐 完整版線上版 v1.2.0（小柯文件PDF線上版）
 
 **[👉 開啟完整版線上版](https://achir1015.github.io/xiaoke-pdf/online/)** — 功能與 Android App 相同（閱讀、註解、填表、簽署、整理頁面、合併分割、加密、塗銷、加／去浮水印…），手機、平板、電腦的瀏覽器都能用。
 
 <img src="release/qr-web.png" width="180" alt="手機掃描開啟完整版線上版">
 
 - **像 Word 一樣編輯**：按「編輯」→ 點一下頁面上的文字，原本的位置就變成編輯框，游標在你點的地方，直接打字；整段文字會自動換行，舊字會從檔案裡真正刪除。上方格式列可以改字型、大小、粗體、底線、刪除線、文字顏色、背景色。點空白處可以直接新增文字。
+- **直書文字（v1.2.0）**：點一下直書（由上往下）的一行就能修改，寫回 PDF 仍是直書；瀏覽器列印、Word 匯出、直書字型三種直書 PDF 都認得。
+- **OCR 文字辨識（v1.2.0）**：字被轉成外框圖形（WPS 匯出常見）或掃描的頁面，按「編輯 → 文字辨識 OCR」把字找出來，之後一樣點一下就能修改；直書、橫書都支援，辨識在瀏覽器裡進行（第一次使用會下載約 6 MB 的辨識程式）。
+- **貼上剪貼簿（v1.2.0）**：按 Ctrl+V 或「編輯 → 貼上」，再點一下要放的位置：文字、網址（變成可點的連結）、圖片都可以。
 - **檔案不會上傳**：所有處理都在瀏覽器裡完成（pdf.js、pdf-lib），網站只提供程式本身。
 - **安裝到主畫面 / 建立捷徑**：Android Chrome「⋮ → 加到主畫面 / 安裝應用程式」；iPhone Safari「分享 → 加入主畫面」；電腦版 Chrome / Edge 按網址列的「安裝」圖示。安裝後有小柯機器人圖示，離線也能用。
 - **更新通知**：網站有新版時，畫面上方會出現「有新版本」通知，按「立即更新」即可。
@@ -85,7 +88,9 @@ web/
 
 ### 📲 下載安裝（Android 7.0 以上）
 
-**[⬇️ 下載 XiaoKePdf.apk（v1.1.0）](https://github.com/achir1015/xiaoke-pdf/raw/main/release/XiaoKePdf.apk)**
+**[⬇️ 下載最新版 XiaoKePdf.apk](https://github.com/achir1015/xiaoke-pdf/raw/main/release/XiaoKePdf.apk)**
+
+> v1.2.0（直書文字修改、貼上剪貼簿）由 GitHub Actions 自動編譯；倉庫設定好簽章金鑰後會自動發佈到這裡與 Releases，App 裡「檢查更新」就會看到。
 
 也可以到 [Releases 頁面](https://github.com/achir1015/xiaoke-pdf/releases/latest) 下載。
 
@@ -109,6 +114,8 @@ web/
 - 受損的檔案會自動修復；加密檔案輸入密碼即可開啟，並遵守作者設定的權限
 
 ### 編輯
+- **直書文字**（v1.2.0）：點一下直書的一行，在對話框裡修改，會以直書寫回原位置（中文直立、英數字橫躺、括號換成直書字形）
+- **貼上**（v1.2.0）：編輯工具列的「貼上」，點一下位置就能貼上剪貼簿裡的文字、網址或圖片
 - **像 Word 一樣編輯文字**：點一下頁面上的文字，原本的位置直接變成編輯框，游標在點到的地方；整段一起改、自動換行，舊字會從檔案裡真正刪除
 - **格式列**：字型（黑體／明體／等寬）、大小、文字顏色、背景顏色、粗體、底線、刪除線
 - **表格**：插入表格（下面的內容自動往下移）、插入列、插入欄、合併儲存格；表格裡的字只在那一格裡編輯、在格子寬度內換行，字變長時那一列自動撐高（頁面放不下才縮小字級）
@@ -147,6 +154,23 @@ web/
 > OCR 文字辨識還在開發中（預計 v1.2）。
 
 ## App 編譯（不用 Gradle）
+
+### GitHub 自動編譯（推薦）
+
+`src/`、`res/`、`AndroidManifest.xml` 等有更新並推到 `main` 時，GitHub Actions（`.github/workflows/android.yml`）會在 GitHub 的主機上編譯 APK：
+
+- **已設定簽章金鑰**：用你的金鑰簽章，自動更新 `release/XiaoKePdf.apk` 並建立 GitHub Release（版本號取自 `AndroidManifest.xml` 的 `versionName`，更新說明取自 `release/RELEASE_NOTES.md`），手機 App 的「檢查更新」就會看到新版。
+- **還沒設定金鑰**：只檢查能不能編譯，測試用 APK 放在該次執行的 Artifacts，不會發佈（用別的金鑰簽的 APK 不能覆蓋安裝舊版）。
+
+設定金鑰只要做一次（需要原本用來簽 APK 的 `xiaokepdf.jks`）：
+
+1. 在有 `xiaokepdf.jks` 的電腦上，把它轉成文字並複製：
+   - Windows PowerShell：`[Convert]::ToBase64String([IO.File]::ReadAllBytes("xiaokepdf.jks")) | Set-Clipboard`
+   - macOS：`base64 -i xiaokepdf.jks | pbcopy`
+2. 到 GitHub 倉庫 **Settings → Secrets and variables → Actions → New repository secret**，名稱填 `XIAOKEPDF_KEYSTORE_BASE64`，內容貼上，按 Add secret。
+3. 到 **Actions → 編譯 Android App → Run workflow** 執行一次，就會發佈目前的版本。
+
+### 在自己電腦上編譯
 
 需要 Python 3.8+、JDK 17、Android SDK（build-tools 34.0.0、platforms/android-34）。
 在專案根目錄建立 `local.properties`：

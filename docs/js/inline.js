@@ -5,6 +5,7 @@ import { loadHuninnFace } from './core.js';
 import * as ops from './ops.js';
 import { K_EDIT } from './doc.js';
 import { loadStyle, saveStyle, FAMILIES } from './style.js';
+import { columnAt, replaceVertical } from './vertical.js';
 
 const FG = ['#000000', '#555555', '#FFFFFF', '#E53935', '#FB8C00', '#FDD835', '#43A047', '#1E63E9', '#8E24AA', '#D81B60'];
 const BG = [null, '#FFFFFF', '#FFF59D', '#FFCC80', '#C8E6C9', '#BBDEFB', '#F8BBD0', '#E0E0E0', '#000000'];
@@ -146,11 +147,42 @@ export class Inline {
 
   async editAt(page, x, y) {
     if (this.active) { await this.commit(); return; }
+    // 直書的一行：textarea 不能直排，用對話框修改，再以直書寫回原位置
+    const vcol = await columnAt(this.app.doc, page, x, y);
+    if (vcol) return this.editVertical(page, vcol);
     const blk = await this.findBlock(page, x, y);
-    if (!blk) return this.addAt(page, x, y);
+    if (!blk) {
+      // 整頁讀不到文字（掃描檔、字被轉成外框圖形）：建議用文字辨識
+      const items = await this.app.doc.text(page);
+      if (!items.some(it => it.str.trim()) && !this.app.doc.ocr.has(page)) {
+        const k = await choose('這一頁讀不到文字', [
+          { t: '用文字辨識（OCR）把字找出來', s: '字可能是掃描的圖片，或匯出時被轉成了外框圖形（WPS 常見）。辨識後就能點選修改。' },
+          { t: '在這裡新增文字' }]);
+        if (k === 0) return this.app.tools.ocr([page]);
+        if (k !== 1) return;
+      }
+      return this.addAt(page, x, y);
+    }
     const col = this.sampleColors(page, blk.area);
     const st = { family: loadStyle('edit').family, size: Math.round(blk.size * 10) / 10, color: col.fg, bg: null, bold: false, underline: false, strike: false };
     this.open({ mode: 'edit', page, area: blk.area, wrapW: blk.wrapW, cell: blk.cell, lastBottom: blk.lastBottom, text: blk.text, caret: blk.caret, base: blk.base, lineHeight: blk.lineHeight, st, mask: col.bg });
+  }
+
+  /** 修改直書的一行 */
+  async editVertical(page, col) {
+    const colors = this.sampleColors(page, col);
+    const r = await form('修改直書文字', [{ key: 't', label: '直書文字', type: 'textarea', value: col.text, rows: 5 }], '套用',
+      '直書：由上往下排；換行＝往左開新的一行。字太多時會在頁面下緣自動換到左邊一行。' + (col.ocr ? '\n這一行是文字辨識的結果，可能有錯字，請確認。' : ''));
+    if (!r) return;
+    const text = r.t.replace(/\s+$/, '');
+    if (text === col.text) return;
+    const st = { size: col.size, color: colors.fg, bold: false };
+    await this.app.edit(text.trim() ? '編輯直書文字' : '刪除文字', K_EDIT, lib => replaceVertical(lib, page, col, text, st, colors.bg));
+    // 改過的 OCR 直行不要再出現（原字已經被蓋住）
+    if (col.ocr) {
+      const list = this.app.doc.ocr.get(page) || [];
+      this.app.doc.ocr.set(page, list.filter(l => l !== col));
+    }
   }
 
   async addAt(page, x, y) {
@@ -452,6 +484,13 @@ export class Inline {
     }
     if (c.mode === 'edit') {
       await this.app.edit(text ? '編輯文字' : '刪除文字', K_EDIT, lib => ops.replaceBlock(lib, c.page, c.area, text, out, c.mask || '#ffffff'));
+      // 改過的 OCR 文字行不要再出現（原本的字已經被蓋住，新字是真正的文字）
+      const d = this.app.doc, list = d.ocr.get(c.page);
+      if (list) {
+        const a = c.area, hit = l => l.x < a.x + a.w && l.x + l.w > a.x && l.y < a.y + a.h && l.y + l.h > a.y;
+        d.ocr.set(c.page, list.filter(l => l.vertical || !hit(l)));
+        d.textCache.delete(c.page);
+      }
     } else {
       await this.app.edit('新增文字', K_EDIT, async lib => {
         const s2 = out.cell ? await ops.fitCell(lib, c.page, text, out) : out;

@@ -3,6 +3,7 @@ import { el, sheet, choose, prompt, form, confirmBox, alertBox, ask, toast, run,
   parsePages, specOf, base, safeName, prefs, today, now, idb } from './util.js';
 import { loadLib, L, openPdfjs, huninn, latin1 } from './core.js';
 import * as ops from './ops.js';
+import { recognize, guessDirection, OCR_SCALE } from './ocr.js';
 import { removeWatermarks, layerNames } from './watermark.js';
 import * as sig from './sign.js';
 import { K_EDIT, K_ANNOT, K_FORM } from './doc.js';
@@ -18,7 +19,7 @@ export const TOOLS = [
   ['organize', '整理頁面', '頁面格狀・旋轉・刪除・插入・移動', '▦', '#43A047', null, 'organize pages rotate delete insert move 旋轉 刪除 插入 移動 頁面'],
   ['split', '分割與擷取', '擷取頁面・每 N 頁分割・指定頁前分割', '✂', '#00897B', null, 'split extract 分割 擷取'],
   ['comment', '新增註解', '便利貼・螢光標示・底線・圖形・手繪', '💬', '#FB8C00', null, 'comment annotate highlight note 註解 螢光 便利貼 手繪'],
-  ['scan', '掃描與 OCR', '用相機掃描文件成 PDF', '⌗', '#43A047', 'OCR 文字辨識：開發中', 'scan camera ocr 掃描 相機 辨識'],
+  ['scan', '掃描與 OCR', '用相機掃描文件成 PDF', '⌗', '#43A047', 'OCR 文字辨識：找出掃描檔、外框文字的字再修改', 'scan camera ocr 掃描 相機 辨識'],
   ['protect', '保護 PDF', '密碼保護・權限・移除隱藏資訊', '🛡', '#1E63E9', null, 'protect password encrypt security 密碼 加密 權限 安全'],
   ['redact', '塗銷 PDF', '框選或搜尋後永久移除內容', '▬', '#E53935', null, 'redact 塗銷 遮蔽 隱私'],
   ['compress', '壓縮 PDF', '縮小圖片，讓檔案變小', '⇲', '#E53935', null, 'compress reduce size 壓縮 縮小'],
@@ -507,10 +508,60 @@ export class Tools {
   }
 
   async scan() {
-    const i = await choose('掃描與 OCR', ['用相機掃描成 PDF', '從相簿圖片建立（文件增強）', 'OCR 文字辨識（開發中）']);
+    const i = await choose('掃描與 OCR', ['用相機掃描成 PDF', '從相簿圖片建立（文件增強）', { t: 'OCR 文字辨識', s: '找出掃描檔、或字被轉成外框圖形的頁面上的字，之後就能點選修改' }]);
     if (i === 0) this.scanLoop([]);
     else if (i === 1) { const fs = await pickFiles('image/*', true); if (fs.length) this.imagesToPdf(fs, true, true, '掃描文件.pdf'); }
-    else if (i === 2) alertBox('OCR 文字辨識', '開發中。\n\n為了維持「文件不離開裝置」的原則，辨識需要在瀏覽器裡執行文字辨識模型，不會把影像送到雲端。目前可以先用相機掃描成 PDF。');
+    else if (i === 2) this.ocr();
+  }
+
+  /**
+   * OCR 文字辨識：請 Tesseract 把頁面上「畫出來的字」抄下來（全程在瀏覽器裡，頁面不上傳）。
+   * 辨識結果併進文件的文字資料：之後可以搜尋、選取，在「編輯文字」裡點一下就能修改（直書維持直書）。
+   */
+  async ocr(pages) {
+    const d = this.d;
+    if (!d) return toast('請先開啟文件');
+    const cur = d.view.page || 0;
+    if (!pages) {
+      const k = await choose('OCR 文字辨識', [{ t: `辨識第 ${cur + 1} 頁` }, { t: `辨識全部 ${d.n} 頁`, s: '每頁約 10～30 秒' }]);
+      if (k < 0) return;
+      pages = k === 0 ? [cur] : [...Array(d.n).keys()];
+    }
+    const k2 = await choose('文字方向', [{ t: '自動判斷' }, { t: '直書', s: '由上往下、由右往左' }, { t: '橫書' }]);
+    if (k2 < 0) return;
+    const direction = ['auto', 'vertical', 'horizontal'][k2];
+    const done = busy('準備文字辨識…');
+    const say = m => { const e = document.querySelector('.busy .bm'); if (e) e.textContent = m; };
+    let found = 0;
+    try {
+      for (const [n, i] of pages.entries()) {
+        const head = pages.length > 1 ? `第 ${i + 1} 頁（${n + 1}/${pages.length}）` : `第 ${i + 1} 頁`;
+        say(`${head}：準備頁面…`);
+        const page = await d.pdf.getPage(i + 1);
+        const vp = page.getViewport({ scale: OCR_SCALE });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+        const g = canvas.getContext('2d', { willReadFrequently: true });
+        g.fillStyle = '#fff'; g.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: g, viewport: vp }).promise;
+        const dir = direction === 'auto' ? guessDirection(canvas) : direction;
+        const lines = await recognize(canvas, dir, m => {
+          if (m.status === 'recognizing text') say(`${head}：辨識${dir === 'vertical' ? '直書' : '橫書'}文字 ${Math.round(m.progress * 100)}%`);
+          else if (/load|initializ/.test(m.status)) say('第一次使用，正在下載文字辨識程式（約 6 MB）…');
+        });
+        d.ocr.set(i, lines);
+        d.textCache.delete(i);
+        found += lines.length;
+      }
+    } catch (e) {
+      console.error(e);
+      done();
+      return alertBox('文字辨識失敗', (e && e.message) || String(e));
+    }
+    done();
+    if (!found) return toast('沒有辨識出文字');
+    this.app.editMode(0);
+    toast(`辨識出 ${found} 行文字。點一下就能修改；辨識可能有錯字，請確認。`, 5000);
   }
 
   async scanLoop(shots) {

@@ -24,6 +24,9 @@ import { toast, busy } from './toast.js';
 import { pickFile } from './dom.js';
 import { recognize, guessDirection, OCR_SCALE } from '../pdf/ocr.js';
 
+/** 網頁版版本號（與線上版、Android App 同步） */
+export const VERSION = '1.2.0';
+
 const TOOL_ORDER = ['select', 'edittext', 'text', 'table', 'cover', 'link', 'media', 'image', '|', 'watermark', 'unwatermark'];
 
 export class App {
@@ -53,7 +56,7 @@ export class App {
   // ================================================================ 外框（標題列、工具列、狀態列）
 
   _buildChrome() {
-    this.$('#brand').innerHTML = `${LOGO}<div><b>小柯文件PDF助手</b><small>網頁版 · 檔案不上傳</small></div>`;
+    this.$('#brand').innerHTML = `${LOGO}<div><b>小柯文件PDF助手</b><small>網頁版 v${VERSION} · 檔案不上傳</small></div>`;
     const tb = this.$('#tools');
     for (const t of TOOL_ORDER) {
       if (t === '|') { tb.appendChild(Object.assign(document.createElement('hr'), {})); continue; }
