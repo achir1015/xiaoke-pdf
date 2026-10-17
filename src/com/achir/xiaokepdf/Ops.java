@@ -651,6 +651,57 @@ public final class Ops {
         imageAppearance(d, a, doc, page, r, b);
     }
 
+    // QR Code 畫在頁面內容裡（Android 16 的 PdfRenderer 不畫印章這類註解），包在一個 Form XObject 中，
+    // 並在 XObject 上記住類型（url / text）、內容與位置；修改時只重畫這個 XObject，位置大小不變。
+    static final COSName QR_ID = COSName.getPDFName("XKQRId"), QR_TYPE = COSName.getPDFName("XKQRType"),
+            QR_DATA = COSName.getPDFName("XKQRData"), QR_RECT = COSName.getPDFName("XKQRRect");
+
+    public static void addQr(PDDocument d, Doc doc, int page, RectF r, String type, String data) throws IOException {
+        PDFormXObject f = new PDFormXObject(d);
+        f.setBBox(new PDRectangle(1, 1));
+        f.getCOSObject().setString(QR_ID, Long.toString(System.currentTimeMillis(), 36) + Integer.toString((int) (Math.random() * 1296), 36));
+        f.getCOSObject().setItem(QR_RECT, doc.toUserRect(page, r).getCOSArray());
+        drawQr(d, f, type, data);
+        try (PDPageContentStream cs = new PDPageContentStream(d, d.getPage(page), PDPageContentStream.AppendMode.APPEND, true, true)) {
+            cs.transform(boxMatrix(doc, page, r, 0, 0));
+            cs.transform(Matrix.getScaleInstance(r.width(), r.height()));
+            cs.drawForm(f);
+        }
+    }
+
+    public static void setQr(PDDocument d, int page, String id, String type, String data) throws IOException {
+        drawQr(d, findQr(d, page, id), type, data);
+    }
+
+    /** 清空這個 XObject（頁面內容裡的引用留著，畫出來是空的）。 */
+    public static void deleteQr(PDDocument d, int page, String id) throws IOException {
+        PDFormXObject f = findQr(d, page, id);
+        f.setResources(new PDResources());
+        try (java.io.OutputStream o = f.getContentStream().createOutputStream()) { o.flush(); }
+        for (COSName k : new COSName[]{QR_ID, QR_TYPE, QR_DATA, QR_RECT}) f.getCOSObject().removeItem(k);
+    }
+
+    private static void drawQr(PDDocument d, PDFormXObject f, String type, String data) throws IOException {
+        PDResources res = new PDResources();
+        COSName im = res.add(image(d, Draw.qr(data)));
+        f.setResources(res);
+        try (java.io.OutputStream o = f.getContentStream().createOutputStream()) {
+            o.write(("q 1 0 0 1 0 0 cm /" + im.getName() + " Do Q").getBytes("US-ASCII"));
+        }
+        f.getCOSObject().setString(QR_TYPE, type);
+        f.getCOSObject().setString(QR_DATA, data);
+    }
+
+    private static PDFormXObject findQr(PDDocument d, int page, String id) throws IOException {
+        PDResources res = d.getPage(page).getResources();
+        if (res != null)
+            for (COSName n : res.getXObjectNames()) {
+                PDXObject x = res.getXObject(n);
+                if (x instanceof PDFormXObject && id.equals(x.getCOSObject().getString(QR_ID))) return (PDFormXObject) x;
+            }
+        throw new IOException("找不到這個 QR Code");
+    }
+
     public static void addLink(PDDocument d, Doc doc, int page, RectF r, String uri, int destPage) throws IOException {
         PDAnnotationLink l = new PDAnnotationLink();
         l.setRectangle(doc.toUserRect(page, r));

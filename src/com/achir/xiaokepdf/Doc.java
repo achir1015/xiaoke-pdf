@@ -9,12 +9,14 @@ import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 
+import com.tom_roush.pdfbox.cos.COSArray;
 import com.tom_roush.pdfbox.cos.COSBase;
 import com.tom_roush.pdfbox.cos.COSDictionary;
 import com.tom_roush.pdfbox.cos.COSName;
 import com.tom_roush.pdfbox.io.MemoryUsageSetting;
 import com.tom_roush.pdfbox.pdmodel.PDDocument;
 import com.tom_roush.pdfbox.pdmodel.PDPage;
+import com.tom_roush.pdfbox.pdmodel.PDResources;
 import com.tom_roush.pdfbox.pdmodel.common.PDPageLabels;
 import com.tom_roush.pdfbox.pdmodel.common.PDRectangle;
 import com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission;
@@ -72,6 +74,8 @@ public class Doc {
     public static class Annot {
         public int index; public String sub; public RectF r; public String field; public String uri; public int dest = -1;
         public boolean hidden;
+        /** 小柯插入的 QR Code：類型（url / text）與內容。 */
+        public String qrType, qr, qrId;
     }
 
     public interface Op { void run(PDDocument d) throws Exception; }
@@ -338,6 +342,31 @@ public class Doc {
 
     // ---------------------------------------------------------------- 頁面資訊
 
+    /** 小柯插入的 QR Code（頁面資源裡帶 XKQRData 的 Form XObject），供點擊修改。 */
+    private void qrCodes(PDPage p, int i, List<Annot> list) {
+        PDResources res = p.getResources();
+        if (res == null) return;
+        COSBase xo = res.getCOSObject().getDictionaryObject(COSName.XOBJECT);
+        if (!(xo instanceof COSDictionary)) return;
+        for (COSName k : ((COSDictionary) xo).keySet()) {
+            COSBase v = ((COSDictionary) xo).getDictionaryObject(k);
+            if (!(v instanceof COSDictionary)) continue;
+            COSDictionary c = (COSDictionary) v;
+            String data = c.getString(Ops.QR_DATA), id = c.getString(Ops.QR_ID);
+            COSBase rect = c.getDictionaryObject(Ops.QR_RECT);
+            if (data == null || id == null || !(rect instanceof COSArray)) continue;
+            PDRectangle r = new PDRectangle((COSArray) rect);
+            Annot x = new Annot();
+            x.index = -1;
+            x.sub = "QR";
+            x.r = toDisplayRect(i, r.getLowerLeftX(), r.getLowerLeftY(), r.getUpperRightX(), r.getUpperRightY());
+            x.qr = data;
+            x.qrType = c.getString(Ops.QR_TYPE, "text");
+            x.qrId = id;
+            list.add(x);
+        }
+    }
+
     void readMeta(PDDocument d) {
         n = d.getNumberOfPages();
         llx = new float[n]; lly = new float[n]; cw = new float[n]; ch = new float[n]; rot = new int[n];
@@ -365,6 +394,7 @@ public class Doc {
                     list.add(x);
                 }
             } catch (Exception ignored) {}
+            try { qrCodes(p, i, list); } catch (Exception ignored) {}
             an.add(list);
             i++;
         }

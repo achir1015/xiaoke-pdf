@@ -51,6 +51,21 @@ public final class Draw {
         return b;
     }
 
+    /** QR Code 圖（含 4 格白邊），每格 8 像素。 */
+    public static Bitmap qr(String data) {
+        QrCode q = QrCode.encode(data);
+        int s = 8, n = q.size + 8;
+        Bitmap b = Bitmap.createBitmap(n * s, n * s, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b);
+        c.drawColor(Color.WHITE);
+        Paint p = new Paint();
+        p.setColor(Color.BLACK);
+        for (int y = 0; y < q.size; y++)
+            for (int x = 0; x < q.size; x++)
+                if (q.dark[y][x]) c.drawRect((x + 4) * s, (y + 4) * s, (x + 5) * s, (y + 5) * s, p);
+        return b;
+    }
+
     /** 印章：圓角外框 + 粗體文字 + 可選日期 / 姓名。 */
     public static Bitmap stamp(String title, String sub, int color) {
         TextPaint big = new TextPaint(Paint.ANTI_ALIAS_FLAG);

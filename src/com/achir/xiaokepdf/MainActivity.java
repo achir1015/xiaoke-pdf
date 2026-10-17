@@ -768,6 +768,7 @@ public class MainActivity extends Activity implements PdfView.L {
                     return;
                 }
                 if (a.field != null) { Panels.editField(this, a.field); return; }
+                if (a.qr != null) { Editing.editQr(this, d, page, a); return; }
                 Panels.commentAt(this, page, a.index);
                 return;
             }
