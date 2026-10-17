@@ -129,15 +129,17 @@ public class MainActivity extends Activity implements PdfView.L {
             refreshTabs();
             int want = prefs.getInt("cur", -1);
             select(Math.min(App.docs.size() - 1, want));
-            then.run();
-            if (!dirty.isEmpty()) {
+            // 有未儲存的文件時，等使用者選「恢復／捨棄」之後才處理這次要開的檔案：
+            // 否則「恢復」會切回上次的分頁，而且要開的檔案若在 dirty 裡會被開成第二個分頁
+            if (dirty.isEmpty()) then.run();
+            else {
                 StringBuilder names = new StringBuilder();
                 for (Doc d : dirty) names.append("・").append(d.name).append(d.uri == null && d.steps.size() == 1 ? "（尚未儲存的新文件）" : "（" + (d.steps.size() - 1) + " 個編輯步驟）").append("\n");
                 U.dlg(this).setTitle("恢復未儲存的工作？")
                         .setMessage("小柯文件PDF助手上次沒有正常結束，以下文件還有未儲存的變更：\n\n" + names + "\n恢復後可以繼續編輯或撤銷。")
                         .setCancelable(false)
-                        .setPositiveButton("恢復", (x, w) -> { App.docs.addAll(dirty); App.docs.sort((x1, y1) -> Integer.compare(x1.order, y1.order)); refreshTabs(); select(Math.min(App.docs.size() - 1, prefs.getInt("cur", 0))); })
-                        .setNegativeButton("捨棄", (x, w) -> { for (Doc d : dirty) d.discard(); })
+                        .setPositiveButton("恢復", (x, w) -> { App.docs.addAll(dirty); App.docs.sort((x1, y1) -> Integer.compare(x1.order, y1.order)); refreshTabs(); select(Math.min(App.docs.size() - 1, want)); then.run(); })
+                        .setNegativeButton("捨棄", (x, w) -> { for (Doc d : dirty) d.discard(); then.run(); })
                         .show();
             }
         });
