@@ -24,6 +24,7 @@ export const TOOL_INFO = {
   cover: { name: '遮蓋', key: 'R', hint: '像修正帶一樣，拖曳框出要蓋掉的區域（例如浮水印殘影、錯字、個資）。可以從頁面取樣背景色。注意：這是「蓋住」，下面的內容仍在檔案裡；要真正刪除浮水印請用「去浮水印」。' },
   link: { name: '網址連結', key: 'L', hint: '點一下：插入一段可點擊的文字連結。拖曳框選：在原本的字上加一塊透明的點擊區。' },
   media: { name: '影音', key: 'M', hint: '點一下或拖曳出位置，放一張播放卡片：可以是 YouTube／影片網址（附 QR Code，紙本也能掃），或把本機的影片、音訊檔直接嵌入 PDF。' },
+  table: { name: '表格', key: 'B', hint: '設定列數、欄數後，在頁面上點一下表格的左上角就會插入表格，下面的內容會自動往下移。插入後點格子就能直接打字。在表格裡改字時，右邊的面板可以「插入列」「插入欄」「合併儲存格」；字太長時那一列會自動撐高。' },
   image: { name: '圖片', key: 'I', hint: '點一下或拖曳出位置，再選擇圖片（PNG、JPG、WebP…）。拉角落改大小時會保持比例，按住 Shift 可自由變形。' },
   watermark: { name: '加浮水印', key: 'W', hint: '' },
   unwatermark: { name: '去浮水印', key: 'U', hint: '' },
@@ -96,6 +97,11 @@ export class Inspector {
         field('字級', slider(6, 96, 1, d.size, v => (d.size = v), v => v + ' pt')),
         field('顏色', colorPicker(d.color, v => (d.color = v))));
     }
+    if (tool === 'table') {
+      const d = this.app.tableDefaults;
+      const num = (v, min, max, set) => h('input', { type: 'number', min, max, value: v, inputmode: 'numeric', onchange: (e) => set(Math.max(min, Math.min(max, Math.round(+e.target.value) || v))) });
+      node.append(field('列數', num(d.rows, 1, 50, v => (d.rows = v))), field('欄數', num(d.cols, 1, 20, v => (d.cols = v))));
+    }
     if (tool === 'edittext' && this.app.view.hitsOn && !this.app.view.shells.some(s => s.lines?.length)) {
       node.append(h('div', { class: 'note warn' }, '這份文件讀不到文字（可能是掃描檔或圖片）。可以改用「遮蓋」蓋掉原字，再用「新增文字」寫上新內容。'));
     }
@@ -144,6 +150,14 @@ export class Inspector {
         syncs.push(e => e.patch && pc.set(e.patch.color));
       }
       node.append(h('button', { type: 'button', class: 'btn', onclick: () => this.app.view.beginEdit(id, { selectAll: true }) }, '在頁面上編輯文字'));
+      if (el.inCell) {
+        node.append(h('h3', {}, '表格'),
+          h('p', { class: 'muted small' }, '字變長時這一列會自動撐高（頁面放不下才縮小字級）。'),
+          h('div', { class: 'row' },
+            h('button', { type: 'button', class: 'btn ghost', onclick: () => this.app.insertRowFor(id) }, '＋ 插入列'),
+            h('button', { type: 'button', class: 'btn ghost', onclick: () => this.app.insertColumnFor(id) }, '＋ 插入欄'),
+            h('button', { type: 'button', class: 'btn ghost', onclick: () => this.app.mergeStart(id) }, '合併儲存格')));
+      }
     }
 
     if (el.kind === 'cover') {

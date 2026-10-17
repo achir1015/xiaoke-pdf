@@ -1,10 +1,10 @@
 // 小柯文件PDF線上版的 Service Worker：離線使用、更新、接收分享的 PDF
-const VERSION = '1.0.1';
+const VERSION = '1.1.0';
 const CACHE = 'xk-pdf-' + VERSION;
 const CORE = [
   './', 'index.html', 'app.css', 'manifest.webmanifest', 'favicon.ico',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png',
-  'js/app.js', 'js/util.js', 'js/core.js', 'js/inline.js', 'js/doc.js', 'js/viewer.js', 'js/ops.js', 'js/watermark.js', 'js/sign.js', 'js/style.js', 'js/panels.js', 'js/tools.js',
+  'js/app.js', 'js/util.js', 'js/core.js', 'js/inline.js', 'js/rowgrow.js', 'js/doc.js', 'js/viewer.js', 'js/ops.js', 'js/watermark.js', 'js/sign.js', 'js/style.js', 'js/panels.js', 'js/tools.js',
   'vendor/pdfjs/pdf.min.js', 'vendor/pdfjs/pdf.worker.min.js', 'vendor/pdf-lib.min.js', 'vendor/fontkit.umd.min.js', 'vendor/forge.min.js', 'vendor/jszip.min.js',
   'fonts/jf-openhuninn-2.1.ttf',
 ];

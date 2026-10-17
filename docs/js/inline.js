@@ -1,6 +1,6 @@
 // 就地編輯（像 Word 一樣）：在頁面上原本文字的位置直接出現編輯框，游標在點到的地方，
 // 上方是格式列（字型、大小、粗體、底線、刪除線、文字顏色、背景色）。
-import { el, prefs, toast, choose } from './util.js';
+import { el, prefs, toast, choose, form } from './util.js';
 import { loadHuninnFace } from './core.js';
 import * as ops from './ops.js';
 import { K_EDIT } from './doc.js';
@@ -20,7 +20,7 @@ export class Inline {
 
   /** 把頁面文字分成行：[{items, x1, x2, top, bottom, size, base}] */
   async lines(page, cell) {
-    let items = (await this.app.doc.text(page)).filter(i => !i.vertical && i.str.length);
+    let items = (await this.app.doc.text(page)).filter(i => !i.vertical && i.str.trim().length);
     // 在表格裡：只看同一格的字（中心點在格子內）
     if (cell) items = items.filter(i => i.x + i.w / 2 > cell.x1 && i.x + i.w / 2 < cell.x2 && i.y + i.h / 2 > cell.y1 && i.y + i.h / 2 < cell.y2);
     items.sort((a, b) => (a.y + a.h / 2) - (b.y + b.h / 2) || a.x - b.x);
@@ -100,7 +100,9 @@ export class Inline {
     // 在表格裡：換行寬度＝儲存格寬（扣掉內距），文字不會超出格子
     const right = cell ? cell.x2 - Math.max(2, area.x - cell.x1) : Math.min(Math.max(...lines.map(l => l.x2), area.x + area.w), this.app.doc.pages[page].w - 18);
     const wrapW = cell ? Math.max(size * 2, right - area.x) : Math.max(area.w, right - area.x);
-    return { page, area, wrapW, cell, text, caret, size, base: blk[0].base, lineHeight: blk.length > 1 ? (blk[blk.length - 1].base - blk[0].base) / (blk.length - 1) : size * 1.25 };
+    // 原本最後一行字的下緣（判斷字有沒有變長、要不要撐高用）
+    const lastBottom = blk[blk.length - 1].base + size * 0.25;
+    return { page, area, wrapW, cell, lastBottom, text, caret, size, base: blk[0].base, lineHeight: blk.length > 1 ? (blk[blk.length - 1].base - blk[0].base) / (blk.length - 1) : size * 1.25 };
   }
 
   // ---------------------------------------------------------------- 取色（直接讀畫面上已繪製的頁面）
@@ -147,16 +149,141 @@ export class Inline {
     if (!blk) return this.addAt(page, x, y);
     const col = this.sampleColors(page, blk.area);
     const st = { family: loadStyle('edit').family, size: Math.round(blk.size * 10) / 10, color: col.fg, bg: null, bold: false, underline: false, strike: false };
-    this.open({ mode: 'edit', page, area: blk.area, wrapW: blk.wrapW, cell: blk.cell, text: blk.text, caret: blk.caret, base: blk.base, lineHeight: blk.lineHeight, st, mask: col.bg });
+    this.open({ mode: 'edit', page, area: blk.area, wrapW: blk.wrapW, cell: blk.cell, lastBottom: blk.lastBottom, text: blk.text, caret: blk.caret, base: blk.base, lineHeight: blk.lineHeight, st, mask: col.bg });
   }
 
   async addAt(page, x, y) {
     if (this.active) { await this.commit(); return; }
     const st = loadStyle('add');
     const p = this.app.doc.pages[page];
-    const w = Math.max(80, p.w - x - 24);
-    const base = y + st.size * 0.35;
-    this.open({ mode: 'add', page, wrapW: w, area: { x, y: base - st.size * 1.15, w, h: st.size * 1.3 }, text: '', caret: 0, base, lineHeight: st.size * 1.25, st, mask: null });
+    let w = Math.max(80, p.w - x - 24);
+    let base = y + st.size * 0.35;
+    const cell = await this.cellAt(page, x, y);
+    if (cell) {
+      // 空白的表格儲存格：從格子左上角開始打字，在格子寬度內換行
+      x = cell.x1 + 4;
+      w = Math.max(st.size * 2, cell.x2 - cell.x1 - 8);
+      base = cell.y1 + 4 + st.size * 0.95;
+    }
+    this.open({ mode: 'add', page, wrapW: w, cell, area: { x, y: base - st.size * 1.15, w, h: st.size * 1.3 }, text: '', caret: 0, base, lineHeight: st.size * 1.25, st, mask: null });
+  }
+
+  // ---------------------------------------------------------------- 表格
+
+  /** 表格範圍：和這一格相連的框線涵蓋的區域 */
+  async tableAt(page, cell) {
+    const { v, h } = await this.app.doc.rules(page);
+    const cx = (cell.x1 + cell.x2) / 2, cy = (cell.y1 + cell.y2) / 2;
+    const vs = v.filter(l => l.y1 <= cy + 1 && l.y2 >= cy - 1);
+    const hs = h.filter(l => l.x1 <= cx + 1 && l.x2 >= cx - 1);
+    return {
+      x1: Math.min(cell.x1, ...vs.map(l => l.x)), x2: Math.max(cell.x2, ...vs.map(l => l.x)),
+      y1: Math.min(cell.y1, ...hs.map(l => l.y)), y2: Math.max(cell.y2, ...hs.map(l => l.y)),
+    };
+  }
+
+  /** 分隔線 split 以下內容的最低點（文字、框線）；沒有內容時回傳 split */
+  async belowMax(page, split) {
+    const items = await this.app.doc.text(page);
+    const { v, h } = await this.app.doc.rules(page);
+    let m = split;
+    for (const it of items) if (it.str.trim() && it.y + it.h * 0.5 > split) m = Math.max(m, it.y + it.h);
+    for (const l of v) if (l.y2 > split) m = Math.max(m, l.y2);
+    for (const l of h) if (l.y > split) m = Math.max(m, l.y);
+    return m;
+  }
+
+  /** 在目前儲存格下方插入一列 */
+  async insertRow() {
+    const c = this.cur;
+    if (!c || !c.cell) return;
+    const page = c.page, pt = { x: c.cell.x1 + 3, y: c.cell.y1 + 3 };
+    await this.commit();
+    const cell = await this.cellAt(page, pt.x, pt.y);
+    if (!cell) return toast('找不到這個儲存格');
+    const table = await this.tableAt(page, cell);
+    const hgt = cell.y2 - cell.y1;
+    const below = await this.belowMax(page, cell.y2 - 1.5);
+    if (below + hgt > this.app.doc.pages[page].h - 18) return toast('頁面下方的空間不夠，無法插入新的一列');
+    await this.app.edit('插入表格列', K_EDIT, lib => ops.insertRow(lib, page, cell, table, hgt));
+  }
+
+  /** 在目前儲存格右邊插入一欄 */
+  async insertColumn() {
+    const c = this.cur;
+    if (!c || !c.cell) return;
+    const page = c.page, pt = { x: c.cell.x1 + 3, y: c.cell.y1 + 3 };
+    await this.commit();
+    const cell = await this.cellAt(page, pt.x, pt.y);
+    if (!cell) return toast('找不到這個儲存格');
+    const table = await this.tableAt(page, cell);
+    const w = Math.min(cell.x2 - cell.x1, 120);
+    if (table.x2 + w <= this.app.doc.pages[page].w - 18) {
+      await this.app.edit('插入表格欄', K_EDIT, lib => ops.insertColumn(lib, page, cell, table, w));
+      return;
+    }
+    // 右邊沒空間：從這一欄沒用到的右半邊切出新的一欄（這一欄的字不能被切到）
+    const items = await this.app.doc.text(page);
+    let right = cell.x1 + 4;
+    for (const it of items) {
+      if (!it.str.trim()) continue;   // pdf.js 在字與字之間補的空白
+      const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+      if (cx > cell.x1 && cx < cell.x2 && cy > table.y1 && cy < table.y2) right = Math.max(right, it.x + it.w);
+    }
+    const avail = cell.x2 - right - 6;
+    if (avail < 30) return toast('這一欄的字已經填滿，右邊也沒有空間，無法插入新的一欄');
+    const x = cell.x2 - Math.min(avail, (cell.x2 - cell.x1) / 2);
+    await this.app.edit('插入表格欄', K_EDIT, lib => ops.splitColumn(lib, page, x, table));
+  }
+
+  /** 合併儲存格：先選這一格，再點要一起合併的格子 */
+  async mergeStart() {
+    const c = this.cur;
+    if (!c || !c.cell) return;
+    const page = c.page, first = c.cell;
+    await this.commit();
+    this.app.setMode({
+      keepStrip: true, hint: '點一下要和它合併的儲存格（右邊、下面或更遠的格子；中間的格子也會一起合併）',
+      tool: {
+        type: 'point', color: '#1E63E9',
+        onTap: async (p, x, y) => {
+          const other = p === page ? await this.cellAt(p, x, y) : null;
+          if (!other) { toast('請點同一頁表格裡的儲存格'); return; }
+          const box = { x1: Math.min(first.x1, other.x1), y1: Math.min(first.y1, other.y1), x2: Math.max(first.x2, other.x2), y2: Math.max(first.y2, other.y2) };
+          await this.app.edit('合併儲存格', K_EDIT, lib => ops.mergeCells(lib, p, box));
+          this.app.editMode(0);
+        },
+      },
+    });
+  }
+
+  /** 插入表格：選列數、欄數，再點要放的位置 */
+  async insertTableMode() {
+    if (this.active) await this.commit();
+    const r = await form('插入表格', [
+      { key: 'rows', label: '列數', type: 'number', value: prefs.get('tbl.rows', 3), inputMode: 'numeric' },
+      { key: 'cols', label: '欄數', type: 'number', value: prefs.get('tbl.cols', 3), inputMode: 'numeric' },
+    ], '下一步', '接著點一下頁面上要放表格的位置（表格左上角）。下面的內容會自動往下移。');
+    if (!r) return this.app.editMode(0);
+    const rows = Math.max(1, Math.min(50, Math.round(r.rows) || 3)), cols = Math.max(1, Math.min(20, Math.round(r.cols) || 3));
+    prefs.set('tbl.rows', rows); prefs.set('tbl.cols', cols);
+    this.app.setMode({
+      keepStrip: true, hint: `點一下要放 ${rows} × ${cols} 表格的位置（左上角）`,
+      tool: {
+        type: 'point', color: '#1E63E9',
+        onTap: async (p, x, y) => {
+          const pg = this.app.doc.pages[p];
+          const x0 = Math.max(18, Math.min(x, pg.w - 18 - 60 * cols));
+          const w = pg.w - 18 - x0, rowH = 24, H = rows * rowH;
+          const below = await this.belowMax(p, y - 2);
+          const push = below + H + 6 <= pg.h - 18;
+          await this.app.edit('插入表格', K_EDIT, lib => ops.addTable(lib, p, x0, y, w, rows, cols, rowH, push));
+          if (!push && below > y) toast('下方空間不夠，所以沒有把內容往下移');
+          this.app.editMode(0);
+          toast('點表格的格子就可以直接打字');
+        },
+      },
+    });
   }
 
   /** 從選取的文字開始編輯（選取列的「改文字」） */
@@ -171,6 +298,8 @@ export class Inline {
     if (v.vrot) v.rotateView(-v.vrot);
     const s = v.slots[c.page];
     if (!s) return;
+    // 結尾的空白不算（否則沒改字也會被當成修改，重寫一次）
+    c.text = c.text.replace(/\s+$/, '');
     this.cur = { ...c, orig: c.text, origSt: JSON.stringify(c.st) };
     const mask = el('div.inline-mask');
     const ta = el('textarea.inline-ed', { spellcheck: false, autocapitalize: 'off', autocomplete: 'off' });
@@ -222,7 +351,7 @@ export class Inline {
     // 在表格裡：文字超出儲存格下緣時用紅框提醒（可以縮小字級或刪短文字）
     const over = !!c.cell && r.y + ta.offsetHeight > v.toCss(c.page, { x: c.cell.x1, y: c.cell.y2, w: 1, h: 1 }).y + 2;
     ta.classList.toggle('over', over);
-    ta.title = over ? '文字超出表格儲存格，請縮小字級或刪短文字' : '';
+    ta.title = over ? '完成後會自動撐高這一列（頁面放不下時會縮小字級）' : '';
     // 遮住原本的文字
     if (c.mode === 'edit') {
       const m = v.toCss(c.page, { x: c.area.x - 1.5, y: c.area.y - 1.5, w: c.area.w + 3, h: c.area.h + 3 });
@@ -239,6 +368,8 @@ export class Inline {
     h.classList.add('fmt');
     const keep = e => e.preventDefault();   // 按格式按鈕時不要讓編輯框失去焦點
     const btn = (t, title, f, on) => { const b = el('button.fb' + (on ? '.on' : ''), { text: t, title, onpointerdown: keep, onclick: () => { f(); this.bar(); this.layout(); c.ta.focus({ preventScroll: true }); } }); return b; };
+    // 表格按鈕：會先完成目前的編輯，所以不重畫格式列
+    const tbtn = (t, title, f) => el('button.fb.ftbl', { text: t, title, onpointerdown: keep, onclick: () => f() });
     const fam = el('select.fsel', { title: '字型', onchange: () => { st.family = +fam.value; this.layout(); c.ta.focus({ preventScroll: true }); } }, FAMILIES.map((f, i) => el('option', { value: i, text: f.replace(/（.*）/, '') })));
     fam.value = st.family;
     const size = el('span.fsize', { text: String(st.size) });
@@ -255,6 +386,11 @@ export class Inline {
       btn('S', '刪除線', () => { st.strike = !st.strike; }, st.strike),
       sw(st.color, '文字顏色', FG, x => st.color = x),
       sw(st.bg, '背景顏色', BG, x => st.bg = x),
+      ...(c.cell ? [
+        tbtn('＋列', '在下方插入一列', () => this.insertRow()),
+        tbtn('＋欄', '在右邊插入一欄', () => this.insertColumn()),
+        tbtn('合併', '合併儲存格', () => this.mergeStart()),
+      ] : []),
       el('span.spacer'),
       el('button.btn', { text: '取消', onpointerdown: keep, onclick: () => this.cancel() }),
       el('button.btn.primary', { text: '完成', onpointerdown: keep, onclick: () => this.commit() }));
@@ -303,10 +439,19 @@ export class Inline {
     if (c.mode === 'add' && !text.trim()) return;
     saveStyle(c.mode === 'edit' ? 'edit' : 'add', { family: st.family, size: st.size, color: st.color, bg: st.bg, bold: st.bold, underline: st.underline, strike: st.strike });
     const out = { ...st, wrapW: c.wrapW || c.area.w, lineHeight: c.mode === 'edit' ? Math.max(c.lineHeight, st.size * 1.05) : st.size * 1.25, baseline: c.base };
+    if (c.cell) {
+      out.cell = c.cell;
+      out.pad = c.mode === 'edit' ? Math.max(1, c.cell.y2 - c.lastBottom) : 3;
+      out.below = await this.belowMax(c.page, c.cell.y2 - 1.5);
+      out.pageH = this.app.doc.pages[c.page].h;
+    }
     if (c.mode === 'edit') {
       await this.app.edit(text ? '編輯文字' : '刪除文字', K_EDIT, lib => ops.replaceBlock(lib, c.page, c.area, text, out, c.mask || '#ffffff'));
     } else {
-      await this.app.edit('新增文字', K_EDIT, lib => ops.addText(lib, c.page, { x: c.area.x, y: c.area.y, w: out.wrapW }, text, out));
+      await this.app.edit('新增文字', K_EDIT, async lib => {
+        const s2 = out.cell ? await ops.fitCell(lib, c.page, text, out) : out;
+        return ops.addText(lib, c.page, { x: c.area.x, y: c.area.y, w: out.wrapW }, text, s2);
+      });
     }
   }
 }

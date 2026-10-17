@@ -8,6 +8,7 @@ export const ICONS = {
   cover: s('<rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 11h6" opacity=".45"/><path d="M15 3l-4 4M19 3l-8 8" opacity=".45"/>'),
   link: s('<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/>'),
   media: s('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/>'),
+  table: s('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.5h18M3 15h18M9 4v16M15 4v16"/>'),
   image: s('<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M21 16l-5-5-9 9"/>'),
   watermark: s('<path d="M12 3s6 6.4 6 10.5A6 6 0 0 1 6 13.5C6 9.4 12 3 12 3z"/><path d="M9.5 14.5a2.8 2.8 0 0 0 2.5 2"/>'),
   unwatermark: s('<path d="M12 3s6 6.4 6 10.5a6 6 0 0 1-.6 2.6M8.4 17.9A6 6 0 0 1 6 13.5c0-1.6.9-3.5 2-5.3"/><path d="M3 3l18 18"/>'),

@@ -13,6 +13,7 @@ import { fonts } from '../pdf/fonts.js';
 import { exportPdf } from '../pdf/exporter.js';
 import { addWatermark } from '../pdf/watermarkAdder.js';
 import { removeWatermarks } from '../pdf/watermarkRemover.js';
+import { growBelow, insertRow, insertColumn, splitColumn, mergeCells, addTable } from '../pdf/tableEditor.js';
 import { fetchYoutubePoster } from '../pdf/media.js';
 import { PDFLib } from '../pdf/libs.js';
 import { downloadBytes, fileToBytes, normalizeImage } from '../pdf/util.js';
@@ -22,7 +23,7 @@ import { ICONS, LOGO } from './icons.js';
 import { toast, busy } from './toast.js';
 import { pickFile } from './dom.js';
 
-const TOOL_ORDER = ['select', 'edittext', 'text', 'cover', 'link', 'media', 'image', '|', 'watermark', 'unwatermark'];
+const TOOL_ORDER = ['select', 'edittext', 'text', 'table', 'cover', 'link', 'media', 'image', '|', 'watermark', 'unwatermark'];
 
 export class App {
   constructor() {
@@ -30,6 +31,7 @@ export class App {
     this.renderer = new PdfRenderer();
     this.tool = 'select';
     this.textDefaults = { font: 'huninn', size: 16, color: '#1d1f23' };
+    this.tableDefaults = { rows: 3, cols: 3 };
     this.$ = (sel) => document.querySelector(sel);
 
     this._buildChrome();
@@ -215,8 +217,14 @@ export class App {
       color: sampled?.ink || '#1d1f23',
       patch: { x: area.x - pad, y: area.y - pad, w: area.w + pad * 2, h: area.h + pad * 2, color: sampled?.bg || '#ffffff' },
     });
+    if (cell) el.inCell = true;
     this.session.add(el, '修改原文字');
     this.view.beginEdit(el.id);
+    if (cell) {
+      // 編輯框量好高度之後，記住它到下框線的距離（之後字變長才撐高）
+      const e = this.session.get(el.id);
+      e.cellPad = Math.max(1, cell.y2 - (e.y + e.h));
+    }
   }
 
   /** 框選（或點一下）建立遮蓋、連結、影音、圖片 */
@@ -284,6 +292,177 @@ export class App {
     const poster = await fetchYoutubePoster(el.youtubeId);
     const now = this.session.get(id);
     if (poster && now && now.youtubeId === el.youtubeId) this.session.update(id, { poster }, { label: '影片封面', coalesce: 'murl:' + id });
+  }
+
+  // ================================================================ 表格
+
+  /** 文字貼紙所在的儲存格（從目前畫面重新偵測，因為表格可能已經變動） */
+  _cellOf(el) {
+    return this.view.cellAtPoint(el.pageIndex, { x: el.x + 2, y: el.y + el.size * 0.7 });
+  }
+
+  /** 表格範圍：沿著儲存格的下框線、右框線往兩端找到底 */
+  _tableOf(i, cell) {
+    const xs = this.view.ruleExtent(i, (cell.x1 + cell.x2) / 2, cell.y2, true) || [cell.x1, cell.x2];
+    const ys = this.view.ruleExtent(i, cell.x2, (cell.y1 + cell.y2) / 2, false) || [cell.y1, cell.y2];
+    return { x1: Math.min(xs[0], cell.x1), x2: Math.max(xs[1], cell.x2), y1: Math.min(ys[0], cell.y1), y2: Math.max(ys[1], cell.y2) };
+  }
+
+  /** 換一份底稿，並把搬移區裡的貼紙一起移（同一個復原步驟） */
+  _replaceBaseMoving(bytes, label, i, area, dx, dy, exceptId) {
+    const s = this.session;
+    s.replaceBase(bytes, label);
+    if (!dx && !dy) return;
+    s.elements = s.elements.map(e => (e.pageIndex === i && e.id !== exceptId && area(e.x, e.y)
+      ? e.with({ x: e.x + dx, y: e.y + dy, patch: e.patch ? { ...e.patch, x: e.patch.x + dx, y: e.patch.y + dy } : null })
+      : e));
+    s._emit('elements');
+  }
+
+  /** 等表格撐高做完、頁面重新畫好（偵測框線要用畫好的頁面） */
+  async _settle(i) {
+    for (let k = 0; k < 100 && this._fitting; k++) await new Promise(r => setTimeout(r, 50));
+    for (let k = 0; k < 100 && !this.view.shells[i]?.renderedScale; k++) await new Promise(r => setTimeout(r, 50));
+  }
+
+  /** 編輯完表格裡的文字：字變長就撐高那一列（下面的內容一起往下移），頁面放不下才縮小字級 */
+  async onEndEdit(id) {
+    const el = this.session.get(id);
+    if (!el || el.kind !== 'text' || !el.inCell || !el.maxW || this._fitting) return;
+    const cell = this._cellOf(el);
+    if (!cell) return;
+    const pad = el.cellPad ?? 4;
+    const need = el.y + el.h + pad - cell.y2;
+    if (need <= 0.5) return;
+    const i = el.pageIndex, g = this.session.pages[i];
+    const split = cell.y2 - 1.5;
+    this._fitting = true;
+    try {
+      if (this.view.lowestInk(i, split) + need <= g.height - 18) {
+        const bytes = await busy('撐高表格列…', () => growBelow(this.session.baseBytes, g, i, split, need));
+        this._replaceBaseMoving(bytes, '撐高表格列', i, (x, y) => y > split, 0, need, id);
+        toast('文字變長了，已自動把這一列撐高（可以按「復原」）', 'ok');
+      } else {
+        let size = el.size;
+        while (size > 5) {
+          size -= 0.5;
+          this.session.update(id, { size }, { label: '縮小字級', coalesce: 'fit:' + id });
+          this.view.syncElements();
+          const e2 = this.session.get(id);
+          if (e2.y + e2.h + pad <= cell.y2 + 0.5) break;
+        }
+        toast(`頁面下方放不下，已把字級縮小到 ${size} pt`, 'warn');
+      }
+    } catch (e) {
+      console.error(e);
+      toast('撐高表格列失敗：' + e.message, 'error');
+    } finally { this._fitting = false; }
+  }
+
+  /** 「改原文字」時點到表格的空白處：有字就改那一格的字，空白格就在格子裡新增文字 */
+  tapBlank(i, p) {
+    const cell = this.view.cellAtPoint(i, p);
+    if (!cell) return false;
+    const lines = (this.view.shells[i].lines || []).filter(l => {
+      const cx = l.x + l.w / 2, cy = l.y + l.h / 2;
+      return cx > cell.x1 && cx < cell.x2 && cy > cell.y1 && cy < cell.y2;
+    });
+    if (lines.length) {
+      const covered = this.session.elementsOn(i).some(e => e.patch && e.patch.x <= lines[0].x + 1 && e.patch.y <= lines[0].y + 1 && e.patch.x + e.patch.w >= lines[0].x + lines[0].w - 1);
+      if (!covered) this.replaceLine(i, lines[0]);
+      return true;
+    }
+    const d = this.textDefaults;
+    const el = new TextElement({ pageIndex: i, x: cell.x1 + 4, y: cell.y1 + 3, text: '', font: d.font, size: d.size, color: d.color, maxW: Math.max(d.size * 2, cell.x2 - cell.x1 - 8) });
+    el.inCell = true;
+    el.cellPad = 3;
+    this.session.add(el);
+    this.view.justCreatedId = el.id;
+    this.view.beginEdit(el.id);
+    return true;
+  }
+
+  async _cellFor(id) {
+    if (this.view.editingId) this.view.endEdit();
+    const el0 = this.session.get(id);
+    if (!el0) return null;
+    await this._settle(el0.pageIndex);
+    const el = this.session.get(id);
+    const cell = el && this._cellOf(el);
+    if (!cell) { toast('找不到這個儲存格', 'warn'); return null; }
+    return { el, cell, i: el.pageIndex, g: this.session.pages[el.pageIndex] };
+  }
+
+  /** 在這一格下方插入一列 */
+  async insertRowFor(id) {
+    const r = await this._cellFor(id);
+    if (!r) return;
+    const { cell, i, g } = r;
+    const table = this._tableOf(i, cell), h = cell.y2 - cell.y1, split = cell.y2 - 1.5;
+    if (this.view.lowestInk(i, split) + h > g.height - 18) { toast('頁面下方的空間不夠，無法插入新的一列', 'warn'); return; }
+    const bytes = await busy('插入表格列…', () => insertRow(this.session.baseBytes, g, i, cell, table, h));
+    this._replaceBaseMoving(bytes, '插入表格列', i, (x, y) => y > split, 0, h);
+  }
+
+  /** 在這一格右邊插入一欄；右邊沒空間時，從這一欄沒用到的右半邊切出新的一欄 */
+  async insertColumnFor(id) {
+    const r = await this._cellFor(id);
+    if (!r) return;
+    const { cell, i, g } = r;
+    const table = this._tableOf(i, cell);
+    const w = Math.min(cell.x2 - cell.x1, 120), split = cell.x2 - 1.5;
+    if (table.x2 + w <= g.width - 18) {
+      const bytes = await busy('插入表格欄…', () => insertColumn(this.session.baseBytes, g, i, cell, table, w));
+      this._replaceBaseMoving(bytes, '插入表格欄', i, (x, y) => x > split && y >= table.y1 - 2 && y <= table.y2 + 2, w, 0);
+      return;
+    }
+    let right = cell.x1 + 4;
+    for (const l of this.view.shells[i].lines || []) {
+      const cx = l.x + l.w / 2, cy = l.y + l.h / 2;
+      if (cx > cell.x1 && cx < cell.x2 && cy > table.y1 && cy < table.y2) right = Math.max(right, l.x + l.w);
+    }
+    for (const e of this.session.elementsOn(i)) if (e.kind === 'text' && e.x > cell.x1 - 1 && e.x < cell.x2 && e.y > table.y1 && e.y < table.y2) right = Math.max(right, e.x + e.w);
+    const avail = cell.x2 - right - 6;
+    if (avail < 30) { toast('這一欄的字已經填滿，右邊也沒有空間，無法插入新的一欄', 'warn'); return; }
+    const x = cell.x2 - Math.min(avail, (cell.x2 - cell.x1) / 2);
+    const bytes = await busy('插入表格欄…', () => splitColumn(this.session.baseBytes, g, i, x, table));
+    this.session.replaceBase(bytes, '插入表格欄');
+  }
+
+  /** 合併儲存格：先記住這一格，再點要一起合併的格子 */
+  async mergeStart(id) {
+    const r = await this._cellFor(id);
+    if (!r) return;
+    this.mergeFrom = { i: r.i, cell: r.cell };
+    this.setTool('edittext');
+    toast('點一下要和它合併的儲存格（中間的格子也會一起合併）', 'info', 5000);
+  }
+
+  async finishMerge(i, p) {
+    const from = this.mergeFrom;
+    this.mergeFrom = null;
+    const other = this.view.cellAtPoint(i, p);
+    if (!from || from.i !== i || !other) { toast('請點同一頁表格裡的儲存格', 'warn'); return; }
+    const box = { x1: Math.min(from.cell.x1, other.x1), y1: Math.min(from.cell.y1, other.y1), x2: Math.max(from.cell.x2, other.x2), y2: Math.max(from.cell.y2, other.y2) };
+    const bytes = await busy('合併儲存格…', () => mergeCells(this.session.baseBytes, this.session.pages[i], i, box));
+    if (!bytes) { toast('這兩格之間沒有可以拿掉的框線', 'warn'); return; }
+    this.session.replaceBase(bytes, '合併儲存格');
+    toast('已合併儲存格', 'ok');
+  }
+
+  /** 插入表格：在點的位置放 rows × cols 的表格，下面的內容往下移 */
+  async insertTable(i, p) {
+    const { rows, cols } = this.tableDefaults;
+    const g = this.session.pages[i];
+    const x0 = Math.max(18, Math.min(p.x, g.width - 18 - 60 * cols));
+    const w = g.width - 18 - x0, rowH = 24, H = rows * rowH;
+    const low = this.view.lowestInk(i, p.y - 2);
+    const push = low > p.y - 2 && low + H + 6 <= g.height - 18;
+    const bytes = await busy('插入表格…', () => addTable(this.session.baseBytes, g, i, x0, p.y, w, rows, cols, rowH, push));
+    this._replaceBaseMoving(bytes, '插入表格', i, (x, y) => y > p.y - 2, 0, push ? H + 6 : 0);
+    if (!push && low > p.y - 2) toast('下方空間不夠，所以沒有把內容往下移', 'warn');
+    this.setTool('edittext');
+    toast('點表格的格子就可以直接打字', 'ok');
   }
 
   // ================================================================ 浮水印

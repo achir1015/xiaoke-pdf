@@ -9,7 +9,7 @@ import { PALETTE, textPng } from './style.js';
 import { loadLib } from './core.js';
 import { Inline } from './inline.js';
 
-export const VERSION = '1.0.1';
+export const VERSION = '1.1.0';
 const REPO = 'achir1015/xiaoke-pdf';
 
 // ================================================================ 搜尋
@@ -756,6 +756,7 @@ class App {
     const items = [
       ['編輯文字', () => { this.setMode({ keepStrip: true, hint: '點一下文字就能直接修改（像 Word 一樣）；點空白處可以新增文字', tool: { type: 'point', color: '#1E63E9', onTap: (p, x, y) => this.inline.editAt(p, x, y) } }); mark(0); }],
       ['新增文字', () => { this.setMode({ keepStrip: true, hint: '點一下要加文字的位置，直接打字', tool: { type: 'point', color: '#1E63E9', onTap: (p, x, y) => this.inline.addAt(p, x, y) } }); mark(1); }],
+      ['插入表格', () => this.inline.insertTableMode()],
       ['新增圖片', () => T.addImage()], ['新增連結', () => T.addLink()], ['浮水印', () => T.watermark()], ['移除浮水印', () => T.removeWatermark()],
       ['頁首頁尾頁碼', () => T.headerFooter()], ['裁切', () => T.crop()], ['整理頁面', () => { this.exitModes(); T.organize(); }], ['完成', () => this.exitModes()],
     ];

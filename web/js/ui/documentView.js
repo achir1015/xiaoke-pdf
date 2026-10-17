@@ -243,6 +243,7 @@ export class DocumentView {
     this.justCreatedId = null;
     this.syncElements();
     this.app.onSelect?.(this.selectedId);
+    if (this.session.get(id)) this.app.onEndEdit?.(id);   // 表格裡的字變長：撐高那一列
   }
 
   // ================================================================ 「改原文字」的偵測層
@@ -394,6 +395,50 @@ export class DocumentView {
     return out;
   }
 
+  /** 點 p 所在的表格儲存格（點在空白格子裡也可以） */
+  cellAtPoint(i, p) { return this.cellAt(i, { x: p.x, y: p.y - 6, w: 1, h: 12, size: 12 }); }
+
+  /** from 以下最低的「有墨水」的位置（顯示座標 y）；下面全是空白時回傳 from */
+  lowestInk(i, from) {
+    const s = this.shells[i];
+    if (!s || !s.renderedScale) return from;
+    const g = s.g, k = s.canvas.width / g.width;
+    const img = this.samplePixels(i, { x: 0, y: 0, w: g.width, h: g.height });
+    if (!img) return from;
+    const { data, width: W, height: H } = img;
+    const top = Math.max(0, Math.floor(from * k));
+    for (let py = H - 1; py > top; py--) {
+      for (let px = 0; px < W; px += 2) {
+        const o = (py * W + px) * 4;
+        if (data[o] + data[o + 1] + data[o + 2] < 600) return py / k;
+      }
+    }
+    return from;
+  }
+
+  /** 從框線上的一點沿著線往兩端找到底：表格的範圍。horizontal＝沿水平線找 x 範圍，否則沿直線找 y 範圍 */
+  ruleExtent(i, x, y, horizontal) {
+    const P = this._pix(i);
+    if (!P) return null;
+    const { g, step } = P;
+    const s = this.shells[i], k = s.canvas.width / g.width;
+    const img = this.samplePixels(i, { x: 0, y: 0, w: g.width, h: g.height });
+    const ink = (X, Y) => {
+      for (const d of [-1, -0.5, 0, 0.5, 1]) {
+        const px = Math.round((horizontal ? X : X + d) * k), py = Math.round((horizontal ? Y + d : Y) * k);
+        if (px < 0 || py < 0 || px >= img.width || py >= img.height) continue;
+        const o = (py * img.width + px) * 4;
+        if (img.data[o] + img.data[o + 1] + img.data[o + 2] < 600) return true;
+      }
+      return false;
+    };
+    let a = horizontal ? x : y, b = a;
+    const lim = horizontal ? g.width : g.height;
+    while (a - step > 0 && (horizontal ? ink(a - step, y) : ink(x, a - step))) a -= step;
+    while (b + step < lim && (horizontal ? ink(b + step, y) : ink(x, b + step))) b += step;
+    return [a, b];
+  }
+
   cellAt(i, line) {
     const P = this._pix(i);
     if (!P) return null;
@@ -458,6 +503,9 @@ export class DocumentView {
       return;
     }
 
+    // 合併儲存格：等使用者點第二個格子
+    if (this.app.mergeFrom && tool === 'edittext') { e.preventDefault(); this.app.finishMerge(shell.index, this._pagePoint(shell, e)); return; }
+
     // 3) 「改原文字」：點到原始文字行
     const hit = e.target.closest('.hit');
     if (hit && tool === 'edittext') {
@@ -470,6 +518,8 @@ export class DocumentView {
     if (this.editingId) { this.endEdit(); }
     const p = this._pagePoint(shell, e);
     if (tool === 'text') { e.preventDefault(); this.app.createText(shell.index, p); return; }
+    if (tool === 'table') { e.preventDefault(); this.app.insertTable(shell.index, p); return; }
+    if (tool === 'edittext' && this.app.tapBlank(shell.index, p)) { e.preventDefault(); return; }
     if (DRAG_TOOLS.has(tool)) { e.preventDefault(); this._startRubber(e, shell, p, tool); return; }
     if (this.selectedId) this.select(null);
   }

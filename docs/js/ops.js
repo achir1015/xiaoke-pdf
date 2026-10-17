@@ -1,6 +1,7 @@
 // 所有用 pdf-lib 改文件的動作。座標參數用「基準顯示座標」（pt，左上原點，頁面本身的旋轉）
 import { L, N, T, D, boxMatrix, pdfRect, fontFor, rgb, huninn, loadLib, openPdfjs, latin1, Viewport, tokenize, serialize, pageContent, setPageContent } from './core.js';
 import { rgbOf, prefs, today, base as baseName } from './util.js';
+import { shiftContent, cutContent, toLatin1, fromLatin1 } from './rowgrow.js';
 
 const pdfjsLib = window.pdfjsLib;
 const { PDFName, PDFArray, PDFNumber, PDFDict, PDFRef, PDFHexString, PDFString, PDFOperator, degrees } = L;
@@ -909,6 +910,8 @@ export async function replaceBlock(d, i, area, text, st, bg) {
   const removed = removeTextIn(d, i, pdfRect(vpOf(page), cover));
   if (!removed) inBox(page, cover, () => page.drawRectangle({ x: 0, y: 0, width: cover.w, height: cover.h, color: rgb(rgbOf(bg)) }));
   if (!text.trim()) return;
+  // 表格裡：文字變長就撐高那一列（放不下才縮小字級）
+  if (st.cell) st = await fitCell(d, i, text, st);
   await addText(d, i, { x: area.x, y: area.y, w: st.wrapW || area.w }, text, st);
 }
 
@@ -966,4 +969,119 @@ export function removeTextIn(d, i, rect) {
   out.push(...ops);
   if (removed) setPageContent(d, page, serialize(out));
   return removed;
+}
+
+// ================================================================ 表格：撐高列、插入列／欄、合併儲存格、插入表格
+
+/**
+ * 搬移頁面上某區域的內容（含註解的位置）。area(X, Y) 用顯示座標判斷；dx, dy 是顯示座標的位移。
+ * @returns {boolean} 有沒有東西被移動
+ */
+export function moveRegion(d, i, area, dx, dy) {
+  const page = d.getPage(i), vp = vpOf(page);
+  const a = vp.convertToPdfPoint(0, 0), b = vp.convertToPdfPoint(dx, dy);
+  const ux = b[0] - a[0], uy = b[1] - a[1];
+  const moves = (x, y) => { const p = vp.convertToViewportPoint(x, y); return area(p[0], p[1]); };
+  const out = shiftContent(toLatin1(pageContent(page)), { moves, ux, uy });
+  if (out) setPageContent(d, page, fromLatin1(out));
+  // 連結、表單欄位等註解也一起移
+  let moved = !!out;
+  const annots = page.node.lookup(N('Annots'));
+  if (annots instanceof PDFArray) {
+    for (let k = 0; k < annots.size(); k++) {
+      const an = annots.lookup(k);
+      const r = an instanceof PDFDict ? an.lookup(N('Rect')) : null;
+      if (!(r instanceof PDFArray) || r.size() < 4) continue;
+      const v = [0, 1, 2, 3].map(j => r.lookup(j).asNumber());
+      const p1 = vp.convertToViewportPoint(v[0], v[1]), p2 = vp.convertToViewportPoint(v[2], v[3]);
+      if (!area(Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1])) || !area(Math.max(p1[0], p2[0]), Math.max(p1[1], p2[1]))) continue;
+      an.set(N('Rect'), d.context.obj([v[0] + ux, v[1] + uy, v[2] + ux, v[3] + uy]));
+      moved = true;
+    }
+  }
+  return moved;
+}
+
+/** 在頁面上畫一條線（顯示座標）。 */
+function dispLine(page, X1, Y1, X2, Y2, width = 0.75, color = '#000000') {
+  const vp = vpOf(page);
+  const a = vp.convertToPdfPoint(X1, Y1), b = vp.convertToPdfPoint(X2, Y2);
+  page.drawLine({ start: { x: a[0], y: a[1] }, end: { x: b[0], y: b[1] }, thickness: width, color: rgb(rgbOf(color)) });
+}
+
+/** 新文字在儲存格裡需要的高度：回傳 { lines, bottom }（bottom 為最後一行字的下緣，顯示座標） */
+export async function measureText(d, text, st, maxW) {
+  const { font } = await fontFor(d, text, st.family || 0, !!st.bold);
+  const size = st.size || 12;
+  const lines = wrap(font, text, size, Math.max(maxW, size * 2));
+  const lh = st.lineHeight || size * 1.25;
+  return { lines: lines.length, bottom: st.baseline + (lines.length - 1) * lh + size * 0.25 };
+}
+
+/**
+ * 表格儲存格裡的文字變長：先把那一列撐高（下面的內容往下移），放不下時才縮小字級。
+ * st.cell：儲存格；st.below：分隔線以下內容的最低點；st.pageH：頁高；st.pad：原本字到下框線的距離。
+ * 回傳新的 st（可能縮小了字級）。
+ */
+export async function fitCell(d, i, text, st) {
+  const c = st.cell;
+  if (!c || !text.trim()) return st;
+  const pad = Math.max(1, st.pad ?? 3);
+  const m = await measureText(d, text, st, st.wrapW);
+  const need = m.bottom + pad - c.y2;
+  if (need <= 0.5) return st;
+  const room = st.pageH - 18 - (st.below ?? c.y2);
+  if (need <= room) {
+    // 撐高：下框線（含）以下全部往下移；跨過分隔線的直框線會被拉長
+    const split = c.y2 - 1.5;
+    moveRegion(d, i, (x, y) => y > split, 0, need);
+    return st;
+  }
+  // 放不下：縮小字級直到塞得進儲存格
+  let s = { ...st };
+  for (let size = st.size - 0.5; size >= 5; size -= 0.5) {
+    s = { ...st, size, lineHeight: (st.lineHeight || st.size * 1.25) * size / st.size };
+    const mm = await measureText(d, text, s, st.wrapW);
+    if (mm.bottom + pad <= c.y2 + 0.5) return s;
+  }
+  return s;
+}
+
+/** 在儲存格下方插入一列（高度 h），table 為表格範圍 */
+export function insertRow(d, i, cell, table, h) {
+  const page = d.getPage(i);
+  const split = cell.y2 - 1.5;
+  moveRegion(d, i, (x, y) => y > split, 0, h);
+  dispLine(page, table.x1, cell.y2, table.x2, cell.y2);
+}
+
+/** 在儲存格右邊插入一欄（寬度 w）：表格範圍內、右邊的內容往右移 */
+export function insertColumn(d, i, cell, table, w) {
+  const page = d.getPage(i);
+  const split = cell.x2 - 1.5;
+  moveRegion(d, i, (x, y) => x > split && y >= table.y1 - 2 && y <= table.y2 + 2, w, 0);
+  dispLine(page, cell.x2, table.y1, cell.x2, table.y2);
+}
+
+/** 把一欄切成兩欄：在 x 畫一條直框線（表格範圍內） */
+export function splitColumn(d, i, x, table) {
+  dispLine(d.getPage(i), x, table.y1, x, table.y2);
+}
+
+/** 合併儲存格：把 box（顯示座標）內部的框線剪掉 */
+export function mergeCells(d, i, box) {
+  const page = d.getPage(i), vp = vpOf(page);
+  const inner = { x1: box.x1 + 2, y1: box.y1 + 2, x2: box.x2 - 2, y2: box.y2 - 2 };
+  const out = cutContent(toLatin1(pageContent(page)), { toDisp: (x, y) => vp.convertToViewportPoint(x, y), box: inner });
+  if (out) setPageContent(d, page, fromLatin1(out));
+  return !!out;
+}
+
+/** 插入表格：左上角 (x, y)、寬 w、rows × cols、每列高 rowH；push＝下面的內容往下移 */
+export function addTable(d, i, x, y, w, rows, cols, rowH, push) {
+  const page = d.getPage(i);
+  const H = rows * rowH;
+  if (push) moveRegion(d, i, (X, Y) => Y > y - 2, 0, H + 6);
+  for (let r = 0; r <= rows; r++) dispLine(page, x, y + r * rowH, x + w, y + r * rowH);
+  for (let c = 0; c <= cols; c++) dispLine(page, x + c * w / cols, y, x + c * w / cols, y + H);
 }
