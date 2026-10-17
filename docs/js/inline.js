@@ -55,7 +55,8 @@ export class Inline {
     for (const l of v) if (y >= l.y1 - tol && y <= l.y2 + tol) { if (l.x <= x && l.x > x1) x1 = l.x; if (l.x >= x && l.x < x2) x2 = l.x; }
     if (!isFinite(x1) || !isFinite(x2)) return null;
     const mx = (x1 + x2) / 2;
-    for (const l of h) if (l.x1 <= Math.min(x, mx) + tol && l.x2 >= Math.max(x, mx) - tol) { if (l.y <= y && l.y > y1) y1 = l.y; if (l.y >= y && l.y < y2) y2 = l.y; }
+    // 橫框線要橫跨整個格子（底線、刪除線之類的短線不算）
+    for (const l of h) if (l.x1 <= x1 + 2 && l.x2 >= x2 - 2) { if (l.y <= y && l.y > y1) y1 = l.y; if (l.y >= y && l.y < y2) y2 = l.y; }
     if (!isFinite(y1) || !isFinite(y2)) return null;
     return { x1, x2, y1, y2 };
   }
@@ -170,15 +171,15 @@ export class Inline {
 
   // ---------------------------------------------------------------- 表格
 
-  /** 表格範圍：和這一格相連的框線涵蓋的區域 */
+  /** 表格範圍：沿著這一格的左右直框線找上下範圍、沿著上下橫框線找左右範圍（不會連到旁邊別的表格） */
   async tableAt(page, cell) {
     const { v, h } = await this.app.doc.rules(page);
     const cx = (cell.x1 + cell.x2) / 2, cy = (cell.y1 + cell.y2) / 2;
-    const vs = v.filter(l => l.y1 <= cy + 1 && l.y2 >= cy - 1);
-    const hs = h.filter(l => l.x1 <= cx + 1 && l.x2 >= cx - 1);
+    const vs = v.filter(l => (Math.abs(l.x - cell.x1) < 1.5 || Math.abs(l.x - cell.x2) < 1.5) && l.y1 <= cy && l.y2 >= cy);
+    const hs = h.filter(l => (Math.abs(l.y - cell.y1) < 1.5 || Math.abs(l.y - cell.y2) < 1.5) && l.x1 <= cx && l.x2 >= cx);
     return {
-      x1: Math.min(cell.x1, ...vs.map(l => l.x)), x2: Math.max(cell.x2, ...vs.map(l => l.x)),
-      y1: Math.min(cell.y1, ...hs.map(l => l.y)), y2: Math.max(cell.y2, ...hs.map(l => l.y)),
+      x1: Math.min(cell.x1, ...hs.map(l => l.x1)), x2: Math.max(cell.x2, ...hs.map(l => l.x2)),
+      y1: Math.min(cell.y1, ...vs.map(l => l.y1)), y2: Math.max(cell.y2, ...vs.map(l => l.y2)),
     };
   }
 
@@ -271,8 +272,12 @@ export class Inline {
       keepStrip: true, hint: `點一下要放 ${rows} × ${cols} 表格的位置（左上角）`,
       tool: {
         type: 'point', color: '#1E63E9',
-        onTap: async (p, x, y) => {
+        onTap: async (p, x, y0) => {
           const pg = this.app.doc.pages[p];
+          // 點在既有的表格裡：改放到那個表格下面（否則會把舊表格的直線一起拉長）
+          const { v } = await this.app.doc.rules(p);
+          let y = y0;
+          for (let k = 0; k < 10; k++) { const ny = Math.max(y, ...v.filter(l => l.y1 < y - 1 && l.y2 > y + 1).map(l => l.y2 + 8)); if (ny === y) break; y = ny; }
           const x0 = Math.max(18, Math.min(x, pg.w - 18 - 60 * cols));
           const w = pg.w - 18 - x0, rowH = 24, H = rows * rowH;
           const below = await this.belowMax(p, y - 2);

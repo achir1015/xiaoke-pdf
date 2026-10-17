@@ -451,9 +451,18 @@ export class App {
   }
 
   /** 插入表格：在點的位置放 rows × cols 的表格，下面的內容往下移 */
-  async insertTable(i, p) {
+  async insertTable(i, p0) {
     const { rows, cols } = this.tableDefaults;
     const g = this.session.pages[i];
+    // 點在既有的表格裡：改放到那個表格下面（否則會把舊表格的直線一起拉長）
+    const p = { ...p0 };
+    for (let k = 0; k < 10; k++) {
+      const cell = this.view.cellAtPoint(i, { x: p.x, y: p.y + 6 });
+      if (!cell) break;
+      const ys = this.view.ruleExtent(i, cell.x1, (cell.y1 + cell.y2) / 2, false);
+      if (!ys) break;
+      p.y = ys[1] + 8;
+    }
     const x0 = Math.max(18, Math.min(p.x, g.width - 18 - 60 * cols));
     const w = g.width - 18 - x0, rowH = 24, H = rows * rowH;
     const low = this.view.lowestInk(i, p.y - 2);

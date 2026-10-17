@@ -51,6 +51,7 @@ public class MainActivity extends Activity implements PdfView.L {
 
     public SharedPreferences prefs;
     public PdfView view;
+    public Inline inline;
     private int cur = -1;            // -1 = 首頁
     private LinearLayout root, tabStrip, toolbar, hintBar, bottomBar, annotBar, selBar, searchBar;
     private HorizontalScrollView tabScroll, annotScroll;
@@ -70,12 +71,14 @@ public class MainActivity extends Activity implements PdfView.L {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         view = new PdfView(this);
         view.l = this;
+        inline = new Inline(this);
         view.night = prefs.getBoolean("night", false);
         view.sepia = prefs.getBoolean("sepia", false);
         buildUi();
-        if (App.docs.isEmpty()) recover();
-        else select(Math.min(App.docs.size() - 1, Math.max(-1, prefs.getInt("cur", -1))));
-        handleIntent(getIntent());
+        // 先恢復上次的分頁，再開啟這次要開的檔案（否則恢復完成時會切回上次的分頁）
+        Intent start = getIntent();
+        if (App.docs.isEmpty()) recover(() -> handleIntent(start));
+        else { select(Math.min(App.docs.size() - 1, Math.max(-1, prefs.getInt("cur", -1)))); handleIntent(start); }
         U.main.postDelayed(autosave, 60_000);
     }
 
@@ -119,13 +122,14 @@ public class MainActivity extends Activity implements PdfView.L {
         setIntent(new Intent());
     }
 
-    private void recover() {
+    private void recover(Runnable then) {
         U.run(this, null, () -> { List<Doc> l = Doc.recover(this); l.sort((x, y) -> Integer.compare(x.order, y.order)); return l; }, list -> {
             List<Doc> dirty = new ArrayList<>();
             for (Doc d : list) { if (d.dirty()) dirty.add(d); else App.docs.add(d); }
             refreshTabs();
             int want = prefs.getInt("cur", -1);
             select(Math.min(App.docs.size() - 1, want));
+            then.run();
             if (!dirty.isEmpty()) {
                 StringBuilder names = new StringBuilder();
                 for (Doc d : dirty) names.append("・").append(d.name).append(d.uri == null && d.steps.size() == 1 ? "（尚未儲存的新文件）" : "（" + (d.steps.size() - 1) + " 個編輯步驟）").append("\n");
@@ -791,7 +795,9 @@ public class MainActivity extends Activity implements PdfView.L {
         selBar.addView(selBtn("改文字", v -> {
             int p = view.selPage, sa = Math.min(view.selA, view.selB), sb = Math.max(view.selA, view.selB);
             selBar.setVisibility(View.GONE);
-            Editing.editRange(this, d, p, d.text(p), sa, sb);
+            List<RectF> rs = d.text(p).rects(sa, sb);
+            clearSel();
+            if (!rs.isEmpty()) inline.editSelection(d, p, rs.get(0));
         }));
         selBar.addView(selBtn("螢光", v -> markup(PDAnnotationTextMarkup.SUB_TYPE_HIGHLIGHT, color("hl", 0xFFFFD400), null)));
         selBar.addView(selBtn("底線", v -> markup(PDAnnotationTextMarkup.SUB_TYPE_UNDERLINE, color("ul", 0xFF1E63E9), null)));
@@ -996,6 +1002,7 @@ public class MainActivity extends Activity implements PdfView.L {
     public void setHint(String s) { if (hintText != null) hintText.setText(s); }
 
     public boolean exitModes() {
+        if (inline != null && inline.active()) inline.commit();
         boolean had = mode != null || annotScroll.getVisibility() == View.VISIBLE || selBar.getVisibility() == View.VISIBLE
                 || searchBar.getVisibility() == View.VISIBLE;
         if (mode != null) { Mode m = mode; mode = null; m.exit(); }
@@ -1029,6 +1036,12 @@ public class MainActivity extends Activity implements PdfView.L {
     public void editMode() { if (doc() != null) Editing.show(this, annotBar); }
 
     public void showAnnotBar(boolean on) { annotScroll.setVisibility(on ? View.VISIBLE : View.GONE); }
+
+    public boolean annotBarVisible() { return annotScroll.getVisibility() == View.VISIBLE; }
+
+    public LinearLayout annotBar() { return annotBar; }
+
+    public FrameLayout readerFrame() { return readerFrame; }
 
     // ------------------------------------------------------------------ Activity 結果
 

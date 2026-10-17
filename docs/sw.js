@@ -1,5 +1,5 @@
 // 小柯文件PDF線上版的 Service Worker：離線使用、更新、接收分享的 PDF
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const CACHE = 'xk-pdf-' + VERSION;
 const CORE = [
   './', 'index.html', 'app.css', 'manifest.webmanifest', 'favicon.ico',

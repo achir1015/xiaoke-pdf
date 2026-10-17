@@ -54,6 +54,10 @@ public class PdfView extends View {
     public float toolWidth = 2f;
     public boolean night, sepia, showFields, selectable = true;
     public String measure;          // 測量中顯示的文字
+    // 就地編輯：蓋住原文字的區塊、每次重繪後把編輯框放回原位
+    public int maskPage = -1, maskColor = 0xFFFFFFFF;
+    public RectF maskRect;
+    public Runnable onFrame;
 
     private RectF[] lay;
     private float layW = 1, layH = 1, base = 1, sx, sy;
@@ -388,7 +392,18 @@ public class PdfView extends View {
     protected void onSizeChanged(int w, int h, int ow, int oh) {
         int p = curPage;
         relayout();
+        // 只有高度改變（鍵盤出現或收起）：維持目前的捲動位置，不要跳回頁首
+        if (w == ow && oh != 0 && mode != SINGLE) { clamp(); invalidate(); scheduleDetail(); return; }
         goTo(p);
+    }
+
+    /** 捲動畫面（像素）。 */
+    public void panBy(float dx, float dy) {
+        sx += dx; sy += dy;
+        clamp();
+        invalidate();
+        updatePage();
+        scheduleDetail();
     }
 
     @Override
@@ -526,6 +541,7 @@ public class PdfView extends View {
             if (a - 1 >= 0 && lay[a - 1] != null && low.get(a - 1) == null) requestLow(a - 1);
         }
         handles(c);
+        if (onFrame != null) onFrame.run();
         if (measure != null) {
             pText.setColor(0xFFFFFFFF);
             float tw = pText.measureText(measure);
@@ -539,6 +555,7 @@ public class PdfView extends View {
         c.save();
         c.concat(pageMatrix(i));
         float inv = 1f / s();
+        if (maskPage == i && maskRect != null) { pFill.setColor(maskColor | 0xFF000000); c.drawRect(maskRect, pFill); }
         if (showFields && i < doc.annots.size()) {
             pFill.setColor(0x332B6CF0);
             pStroke.setColor(0x992B6CF0); pStroke.setStrokeWidth(inv);

@@ -16,7 +16,7 @@ import java.util.List;
 public final class Editing {
     private Editing() {}
 
-    static final String[] NAMES = {"編輯文字", "新增文字", "新增圖片", "新增連結", "浮水印", "移除浮水印", "頁首頁尾頁碼", "裁切", "整理頁面"};
+    static final String[] NAMES = {"編輯文字", "新增文字", "插入表格", "新增圖片", "新增連結", "浮水印", "移除浮水印", "頁首頁尾頁碼", "裁切", "整理頁面"};
     private static int current;
 
     public static void show(MainActivity a, LinearLayout bar) {
@@ -64,9 +64,10 @@ public final class Editing {
                 else addTextMode(a, d);
                 a.showAnnotBar(true);
                 return;
-            case 2: Tools.pickImage(a, b -> Tools.place(a, "拖曳出圖片的位置與大小（或點一下）", b.getWidth() / (float) b.getHeight(), 200, false,
+            case 2: a.inline.insertTableMode(); break;
+            case 3: Tools.pickImage(a, b -> Tools.place(a, "拖曳出圖片的位置與大小（或點一下）", b.getWidth() / (float) b.getHeight(), 200, false,
                     (p, r) -> a.edit("新增圖片", Doc.K_EDIT, pd -> Ops.addImage(pd, d, p, r, b, 1)))); break;
-            case 3: Tools.place(a, "框選要變成連結的區域", 0, 120, false, (p, r) ->
+            case 4: Tools.place(a, "框選要變成連結的區域", 0, 120, false, (p, r) ->
                     U.choose(a, "連結到", new String[]{"網址", "文件中的頁面"}, x -> {
                         if (x == 0) U.input(a, "網址", "https://", "https://", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI,
                                 t -> a.edit("新增連結", Doc.K_EDIT, pd -> Ops.addLink(pd, d, p, r, t, -1)));
@@ -77,51 +78,25 @@ public final class Editing {
                             } catch (NumberFormatException e) { U.toast(a, "請輸入頁碼"); }
                         });
                     })); break;
-            case 4: Tools.watermark(a, d); break;
-            case 5: Tools.removeWatermark(a); break;
-            case 6: Tools.headerFooter(a, d); break;
-            case 7: Tools.crop(a, null); break;
-            case 8: Organizer.show(a); break;
+            case 5: Tools.watermark(a, d); break;
+            case 6: Tools.removeWatermark(a); break;
+            case 7: Tools.headerFooter(a, d); break;
+            case 8: Tools.crop(a, null); break;
+            case 9: Organizer.show(a); break;
         }
     }
 
-    /** 點一下頁面上的文字 → 修改那一行。 */
+    /** 點一下頁面上的文字 → 原本的位置直接變成編輯框（像 Word 一樣，整段一起改）。 */
     static void editTextMode(MainActivity a, Doc d) {
         a.setMode(new MainActivity.Mode() {
-            @Override public void tap(int page, float x, float y) {
-                U.bg.execute(() -> {
-                    TextData.Page tp = d.text(page);
-                    int i = tp.hit(x, y, 14);
-                    U.ui(() -> {
-                        if (i < 0) { U.toast(a, "這裡沒有可編輯的文字（掃描的影像無法編輯文字）"); return; }
-                        int[] ln = tp.line(i);
-                        a.view.selPage = page; a.view.selA = ln[0]; a.view.selB = ln[1];
-                        a.view.invalidate();
-                        editRange(a, d, page, tp, ln[0], ln[1]);
-                    });
-                });
-            }
-        }, PdfView.T_POINT, "點一下要修改的文字（以整行為單位）", null, null);
+            @Override public void tap(int page, float x, float y) { a.inline.editAt(d, page, x, y); }
+        }, PdfView.T_POINT, "點一下要修改的文字，直接在頁面上打字（點空白處可新增文字）", null, null);
     }
 
-    /** 修改 a..b 這段文字（選取列的「改文字」也用這個）。 */
+    /** 修改 s..e 這段文字（舊介面）：改成就地編輯那一段。 */
     public static void editRange(MainActivity a, Doc d, int page, TextData.Page tp, int s, int e) {
-        String b = d.block(Doc.K_EDIT);
-        if (b != null) { a.blocked(d, b); return; }
         List<RectF> rs = tp.rects(s, e);
-        if (rs.isEmpty()) return;
-        RectF area = new RectF(rs.get(0));
-        for (RectF r : rs) area.union(r);
-        String old = tp.text.substring(s, e + 1).replace('\n', ' ');
-        TextStyle st = TextStyle.load(a, "edit");
-        st.size = Math.round(tp.size(s, e) * 10) / 10f;
-        st.bg = 0;
-        TextStyle.dialog(a, "編輯文字", old, old, st, "套用", (nt, ns) -> {
-            a.view.clearSelection();
-            ns.save(a, "edit");
-            U.run(a, "編輯文字…", () -> background(d, page, area), bg ->
-                    a.edit("編輯文字", Doc.K_EDIT, pd -> Ops.replaceText(pd, d, page, area, nt, ns, bg)));
-        }).setOnDismissListener(x -> a.view.clearSelection());
+        if (!rs.isEmpty()) a.inline.editSelection(d, page, rs.get(0));
     }
 
     /** 取樣文字周圍的背景色（多數頁面是白色，但也支援有底色的頁面）。 */
@@ -154,13 +129,11 @@ public final class Editing {
         return Math.abs(Color.red(a) - Color.red(b)) + Math.abs(Color.green(a) - Color.green(b)) + Math.abs(Color.blue(a) - Color.blue(b)) < 30;
     }
 
-    /** 點一下或拖曳 → 輸入文字 → 寫進頁面（可連續新增）。 */
+    /** 點一下 → 在那裡直接打字（可連續新增）。 */
     static void addTextMode(MainActivity a, Doc d) {
         a.setMode(new MainActivity.Mode() {
-            @Override public void tap(int page, float x, float y) {
-                Tools.addTextDialog(a, d, page, new RectF(x, y, Math.min(d.dw(page), x + 260), y + 20));
-            }
-            @Override public void rect(int page, RectF r) { Tools.addTextDialog(a, d, page, r); }
-        }, PdfView.T_RECT, "點一下要加文字的位置，或拖曳出文字框（可連續新增）", null, null);
+            @Override public void tap(int page, float x, float y) { a.inline.addAt(d, page, x, y); }
+            @Override public void rect(int page, RectF r) { a.inline.addAt(d, page, r.left, r.top + 8); }
+        }, PdfView.T_RECT, "點一下要加文字的位置，直接打字（可連續新增）", null, null);
     }
 }

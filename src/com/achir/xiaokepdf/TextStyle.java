@@ -29,10 +29,11 @@ public class TextStyle {
     public int color = 0xFF000000;
     public int bg;                  // 0 = 無背景
     public boolean bold, underline, strike;
+    public float lineHeight;        // 行距（pt）；0＝字級 × 1.25。不儲存
 
     public TextStyle copy() {
         TextStyle s = new TextStyle();
-        s.family = family; s.size = size; s.color = color; s.bg = bg; s.bold = bold; s.underline = underline; s.strike = strike;
+        s.family = family; s.size = size; s.color = color; s.bg = bg; s.bold = bold; s.underline = underline; s.strike = strike; s.lineHeight = lineHeight;
         return s;
     }
 

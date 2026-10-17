@@ -76,7 +76,7 @@ export async function splitColumn(bytes, g, i, x, table) {
 export async function mergeCells(bytes, g, i, box) {
   const doc = await load(bytes);
   const page = doc.getPage(i);
-  const inner = { x1: box.x1 + 2, y1: box.y1 + 2, x2: box.x2 - 2, y2: box.y2 - 2 };
+  const inner = { x1: box.x1 + 0.75, y1: box.y1 + 0.75, x2: box.x2 - 0.75, y2: box.y2 - 0.75 };
   const out = cutContent(pageContentText(page), { toDisp: (x, y) => g.toDisplay(x, y), box: inner });
   if (!out) return null;
   setPageContent(page, fromLatin1(out));

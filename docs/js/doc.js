@@ -155,17 +155,27 @@ export class Doc {
       let ctm = [1, 0, 0, 1, 0, 0];
       const stack = [];
       const pt = (x, y) => U.applyTransform(U.applyTransform([x, y], ctm), vp.transform);
+      // 路徑畫出來之前先暫存：描邊的線才算框線；填色的只有細長矩形（當線畫的框線）才算，
+      // 一般的底色（文字背景色、儲存格底色）不算
+      let pend = { v: [], h: [] }, thin = { v: [], h: [] };
       const seg = (a, b) => {
         const [x1, y1] = a, [x2, y2] = b;
-        if (Math.abs(x1 - x2) < 1.5 && Math.abs(y1 - y2) > 4) out.v.push({ x: (x1 + x2) / 2, y1: Math.min(y1, y2), y2: Math.max(y1, y2) });
-        else if (Math.abs(y1 - y2) < 1.5 && Math.abs(x1 - x2) > 4) out.h.push({ y: (y1 + y2) / 2, x1: Math.min(x1, x2), x2: Math.max(x1, x2) });
+        if (Math.abs(x1 - x2) < 1.5 && Math.abs(y1 - y2) > 4) pend.v.push({ x: (x1 + x2) / 2, y1: Math.min(y1, y2), y2: Math.max(y1, y2) });
+        else if (Math.abs(y1 - y2) < 1.5 && Math.abs(x1 - x2) > 4) pend.h.push({ y: (y1 + y2) / 2, x1: Math.min(x1, x2), x2: Math.max(x1, x2) });
       };
+      const done = (stroke, fill) => {
+        if (stroke) { out.v.push(...pend.v); out.h.push(...pend.h); }
+        if (stroke || fill) { out.v.push(...thin.v); out.h.push(...thin.h); }
+        pend = { v: [], h: [] }; thin = { v: [], h: [] };
+      };
+      const STROKE = new Set([OPS.stroke, OPS.closeStroke]), FILL = new Set([OPS.fill, OPS.eoFill]),
+        BOTH = new Set([OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
       const rect = (x, y, w, h) => {
         const a = pt(x, y), b = pt(x + w, y), c = pt(x + w, y + h), d = pt(x, y + h);
         const W = Math.abs(a[0] - c[0]), H = Math.abs(a[1] - c[1]);
         // 細長的實心矩形＝一條線；一般矩形＝四個邊
-        if (W < 2.5 && H > 4) seg([(a[0] + c[0]) / 2, a[1]], [(a[0] + c[0]) / 2, c[1]]);
-        else if (H < 2.5 && W > 4) seg([a[0], (a[1] + c[1]) / 2], [c[0], (a[1] + c[1]) / 2]);
+        if (W < 2.5 && H > 4) thin.v.push({ x: (a[0] + c[0]) / 2, y1: Math.min(a[1], c[1]), y2: Math.max(a[1], c[1]) });
+        else if (H < 2.5 && W > 4) thin.h.push({ y: (a[1] + c[1]) / 2, x1: Math.min(a[0], c[0]), x2: Math.max(a[0], c[0]) });
         else { seg(a, b); seg(b, c); seg(c, d); seg(d, a); }
       };
       for (let k = 0; k < ol.fnArray.length; k++) {
@@ -175,6 +185,10 @@ export class Doc {
         else if (fn === OPS.transform) ctm = U.transform(ctm, args);
         else if (fn === OPS.paintFormXObjectBegin) { stack.push(ctm); if (args[0]) ctm = U.transform(ctm, args[0]); }
         else if (fn === OPS.paintFormXObjectEnd) ctm = stack.pop() || ctm;
+        else if (STROKE.has(fn)) done(true, false);
+        else if (FILL.has(fn)) done(false, true);
+        else if (BOTH.has(fn)) done(true, true);
+        else if (fn === OPS.endPath) done(false, false);
         else if (fn === OPS.constructPath) {
           const [sub, co] = args;
           let j = 0, cur = null, start = null;

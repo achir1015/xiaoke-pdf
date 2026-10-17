@@ -1071,7 +1071,7 @@ export function splitColumn(d, i, x, table) {
 /** 合併儲存格：把 box（顯示座標）內部的框線剪掉 */
 export function mergeCells(d, i, box) {
   const page = d.getPage(i), vp = vpOf(page);
-  const inner = { x1: box.x1 + 2, y1: box.y1 + 2, x2: box.x2 - 2, y2: box.y2 - 2 };
+  const inner = { x1: box.x1 + 0.75, y1: box.y1 + 0.75, x2: box.x2 - 0.75, y2: box.y2 - 0.75 };
   const out = cutContent(toLatin1(pageContent(page)), { toDisp: (x, y) => vp.convertToViewportPoint(x, y), box: inner });
   if (out) setPageContent(d, page, fromLatin1(out));
   return !!out;

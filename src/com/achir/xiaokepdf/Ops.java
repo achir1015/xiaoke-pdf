@@ -12,6 +12,13 @@ import com.tom_roush.pdfbox.cos.COSArray;
 import com.tom_roush.pdfbox.cos.COSBase;
 import com.tom_roush.pdfbox.cos.COSDictionary;
 import com.tom_roush.pdfbox.cos.COSName;
+import com.tom_roush.pdfbox.cos.COSNumber;
+import com.tom_roush.pdfbox.cos.COSFloat;
+import com.tom_roush.pdfbox.cos.COSString;
+import com.tom_roush.pdfbox.contentstream.operator.Operator;
+import com.tom_roush.pdfbox.pdfparser.PDFStreamParser;
+import com.tom_roush.pdfbox.pdfwriter.ContentStreamWriter;
+import com.tom_roush.pdfbox.pdmodel.common.PDStream;
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility;
 import com.tom_roush.pdfbox.pdmodel.PDDocument;
 import com.tom_roush.pdfbox.pdmodel.PDDocumentCatalog;
@@ -347,7 +354,7 @@ public final class Ops {
         }
         float size = st.size;
         List<String> lines = wrap(f, text, size, r.width() > 20 ? Math.max(r.width(), size * 2) : 0);
-        float lh = size * 1.25f, H = lines.size() * lh;
+        float lh = st.lineHeight > 0 ? st.lineHeight : size * 1.25f, H = (lines.size() - 1) * lh + size * 1.25f;
         float maxW = 0;
         float[] widths = new float[lines.size()];
         for (int i = 0; i < lines.size(); i++) { widths[i] = f.getStringWidth(lines.get(i)) / 1000 * size; maxW = Math.max(maxW, widths[i]); }
@@ -1518,5 +1525,210 @@ public final class Ops {
     public static String fmtDate(Calendar c) {
         if (c == null) return "";
         return new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.TAIWAN).format(c.getTime());
+    }
+
+    // ================================================================ 像 Word 一樣就地修改整段文字
+
+    /**
+     * 就地修改一段文字：先把範圍內原本的文字從內容串流真正刪除（刪不到時才用背景色蓋住），
+     * 再從原本第一行的基線開始寫新文字，在 wrapW 寬度內自動換行。
+     * area：原文字範圍（顯示座標）；baseline：第一行基線（顯示座標 y）。
+     */
+    public static void replaceBlock(PDDocument d, Doc doc, int page, RectF area, float baseline, float wrapW,
+                                    String text, TextStyle st, int bg, TableOps.Fit fit) throws IOException {
+        RectF cover = new RectF(area);
+        cover.inset(-1.5f, -1.5f);
+        boolean removed = removeTextIn(d, doc, page, cover);
+        if (!removed) {
+            PDPage p = d.getPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(d, p, PDPageContentStream.AppendMode.APPEND, true, true)) {
+                cs.transform(boxMatrix(doc, page, cover, 0, 0));
+                cs.setNonStrokingColor(color(bg));
+                cs.addRect(0, 0, cover.width(), cover.height());
+                cs.fill();
+            }
+        }
+        if (text.trim().isEmpty()) return;
+        // 表格裡：字變長就撐高那一列（放不下才縮小字級）
+        st = TableOps.fit(d, doc, page, text, st, baseline, wrapW, fit);
+        float top = baseline - st.size;
+        addText(d, doc, page, new RectF(area.left - 1, top, area.left - 1 + Math.max(wrapW, st.size * 2) + 1, top + st.size), text, st);
+    }
+
+    /** a×b（PDF 矩陣 [a b c d e f]）。 */
+    private static float[] mul(float[] a, float[] b) {
+        return new float[]{
+                a[0] * b[0] + a[1] * b[2], a[0] * b[1] + a[1] * b[3],
+                a[2] * b[0] + a[3] * b[2], a[2] * b[1] + a[3] * b[3],
+                a[4] * b[0] + a[5] * b[2] + b[4], a[4] * b[1] + a[5] * b[3] + b[5]};
+    }
+
+    private static float num(Object o) { return o instanceof COSNumber ? ((COSNumber) o).floatValue() : 0; }
+
+    private static float[] six(List<Object> ops) {
+        int n = ops.size();
+        return new float[]{num(ops.get(n - 6)), num(ops.get(n - 5)), num(ops.get(n - 4)), num(ops.get(n - 3)), num(ops.get(n - 2)), num(ops.get(n - 1))};
+    }
+
+    /**
+     * 把頁面內容中、起點落在 rect（顯示座標）裡的文字繪製指令刪掉。
+     * 刪掉的 Tj/TJ 換成只移動位置的 [-n] TJ，同一行後面的字不會跑位。回傳是否有刪到。
+     */
+    public static boolean removeTextIn(PDDocument d, Doc doc, int page, RectF rect) throws IOException {
+        PDPage p = d.getPage(page);
+        PDRectangle ur = doc.toUserRect(page, rect);
+        float x0 = ur.getLowerLeftX(), y0 = ur.getLowerLeftY(), x1 = x0 + ur.getWidth(), y1 = y0 + ur.getHeight();
+        PDResources res = p.getResources();
+        List<Object> tokens;
+        try {
+            PDFStreamParser parser = new PDFStreamParser(p);
+            parser.parse();
+            tokens = parser.getTokens();
+        } catch (Exception e) { return false; }
+
+        final float[] I = {1, 0, 0, 1, 0, 0};
+        java.util.ArrayDeque<float[]> stack = new java.util.ArrayDeque<>();
+        float[] ctm = I.clone(), tm = I.clone(), tlm = I.clone();
+        float fs = 0, tc = 0, tw = 0, th = 1, tl = 0;
+        PDFont font = null;
+        List<Object> out = new ArrayList<>(), ops = new ArrayList<>();
+        boolean changed = false;
+
+        for (Object t : tokens) {
+            if (!(t instanceof Operator)) { ops.add(t); continue; }
+            String n = ((Operator) t).getName();
+            List<Object> repl = null;
+            boolean drop = false;
+            int k = ops.size();
+            switch (n) {
+                case "q": stack.push(ctm.clone()); break;
+                case "Q": if (!stack.isEmpty()) ctm = stack.pop(); break;
+                case "cm": if (k >= 6) ctm = mul(six(ops), ctm); break;
+                case "BT": tm = I.clone(); tlm = I.clone(); break;
+                case "Tf":
+                    if (k >= 2) {
+                        fs = num(ops.get(k - 1));
+                        try { font = ops.get(k - 2) instanceof COSName && res != null ? res.getFont((COSName) ops.get(k - 2)) : null; } catch (Exception e) { font = null; }
+                    }
+                    break;
+                case "Tc": if (k >= 1) tc = num(ops.get(k - 1)); break;
+                case "Tw": if (k >= 1) tw = num(ops.get(k - 1)); break;
+                case "Tz": if (k >= 1) th = num(ops.get(k - 1)) / 100f; break;
+                case "TL": if (k >= 1) tl = num(ops.get(k - 1)); break;
+                case "Td": case "TD":
+                    if (k >= 2) {
+                        if (n.equals("TD")) tl = -num(ops.get(k - 1));
+                        tlm = mul(new float[]{1, 0, 0, 1, num(ops.get(k - 2)), num(ops.get(k - 1))}, tlm);
+                        tm = tlm.clone();
+                    }
+                    break;
+                case "Tm": if (k >= 6) { tlm = six(ops); tm = tlm.clone(); } break;
+                case "T*": tlm = mul(new float[]{1, 0, 0, 1, 0, -tl}, tlm); tm = tlm.clone(); break;
+                case "Tj": case "'": case "\"": case "TJ": {
+                    boolean nl = n.equals("'") || n.equals("\"");
+                    if (n.equals("\"") && k >= 3) { tw = num(ops.get(k - 3)); tc = num(ops.get(k - 2)); }
+                    if (nl) { tlm = mul(new float[]{1, 0, 0, 1, 0, -tl}, tlm); tm = tlm.clone(); }
+                    // 起點往上 0.3 字高（字身中間），比較不會剛好壓在邊界上
+                    float[] trm = mul(tm, ctm);
+                    float px = 0.3f * fs * trm[2] + trm[4], py = 0.3f * fs * trm[3] + trm[5];
+                    boolean inside = px >= x0 && px <= x1 && py >= y0 && py <= y1;
+                    // 這段字的前進量（文字空間）
+                    float adv = 0;
+                    List<Object> parts = new ArrayList<>();
+                    if (n.equals("TJ")) { if (k >= 1 && ops.get(k - 1) instanceof COSArray) for (COSBase b : (COSArray) ops.get(k - 1)) parts.add(b); }
+                    else if (k >= 1) parts.add(ops.get(k - 1));
+                    for (Object o : parts) {
+                        if (o instanceof COSNumber) { adv -= ((COSNumber) o).floatValue() / 1000f * fs * th; continue; }
+                        if (!(o instanceof COSString)) continue;
+                        try (InputStream in = new ByteArrayInputStream(((COSString) o).getBytes())) {
+                            while (in.available() > 0) {
+                                int before = in.available();
+                                int code = font != null ? font.readCode(in) : in.read();
+                                float w = 0.5f;
+                                try { if (font != null) w = font.getWidth(code) / 1000f; } catch (Exception ignored) {}
+                                boolean space = code == 32 && before - in.available() == 1;
+                                adv += (w * fs + tc + (space ? tw : 0)) * th;
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    if (inside) {
+                        drop = true;
+                        changed = true;
+                        repl = new ArrayList<>();
+                        if (n.equals("\"") && k >= 3) {
+                            repl.add(ops.get(k - 3)); repl.add(Operator.getOperator("Tw"));
+                            repl.add(ops.get(k - 2)); repl.add(Operator.getOperator("Tc"));
+                        }
+                        if (nl) repl.add(Operator.getOperator("T*"));
+                        if (fs != 0 && th != 0 && adv != 0) {
+                            COSArray arr = new COSArray();
+                            arr.add(new COSFloat(-adv / (fs * th) * 1000f));
+                            repl.add(arr);
+                            repl.add(Operator.getOperator("TJ"));
+                        }
+                    }
+                    tm = mul(new float[]{1, 0, 0, 1, adv, 0}, tm);
+                    break;
+                }
+            }
+            if (drop) out.addAll(repl);
+            else { out.addAll(ops); out.add(t); }
+            ops.clear();
+        }
+        out.addAll(ops);
+        if (!changed) return false;
+        PDStream ns = new PDStream(d);
+        try (OutputStream os = ns.createOutputStream(COSName.FLATE_DECODE)) { new ContentStreamWriter(os).writeTokens(out); }
+        p.setContents(ns);
+        return true;
+    }
+
+    /** 表格框線（顯示座標）：v 每條 {x, y1, y2}，h 每條 {y, x1, x2}。 */
+    public static class Rules { public final List<float[]> v = new ArrayList<>(), h = new ArrayList<>(); }
+
+    public static Rules rules(PDDocument d, Doc doc, int page) {
+        final Rules r = new Rules();
+        try {
+            PDPage p = d.getPage(page);
+            new com.tom_roush.pdfbox.contentstream.PDFGraphicsStreamEngine(p) {
+                android.graphics.PointF cur, start;
+                // 路徑還沒畫出來前先暫存：描邊的線才算框線；填色的只有細長矩形（當線畫的框線）才算，
+                // 一般的底色（例如文字背景色、儲存格底色）不算框線
+                final List<float[]> pv = new ArrayList<>(), ph = new ArrayList<>(), tv = new ArrayList<>(), th = new ArrayList<>();
+                void seg(android.graphics.PointF a, android.graphics.PointF b) {
+                    float[] da = doc.toDisplay(page, a.x, a.y), db = doc.toDisplay(page, b.x, b.y);
+                    if (Math.abs(da[0] - db[0]) < 1.5f && Math.abs(da[1] - db[1]) > 4)
+                        pv.add(new float[]{(da[0] + db[0]) / 2, Math.min(da[1], db[1]), Math.max(da[1], db[1])});
+                    else if (Math.abs(da[1] - db[1]) < 1.5f && Math.abs(da[0] - db[0]) > 4)
+                        ph.add(new float[]{(da[1] + db[1]) / 2, Math.min(da[0], db[0]), Math.max(da[0], db[0])});
+                }
+                void done(boolean stroke, boolean fill) {
+                    if (stroke) { r.v.addAll(pv); r.h.addAll(ph); }
+                    if (stroke || fill) { r.v.addAll(tv); r.h.addAll(th); }
+                    pv.clear(); ph.clear(); tv.clear(); th.clear();
+                }
+                @Override public void appendRectangle(android.graphics.PointF p0, android.graphics.PointF p1, android.graphics.PointF p2, android.graphics.PointF p3) {
+                    float[] a = doc.toDisplay(page, p0.x, p0.y), c = doc.toDisplay(page, p2.x, p2.y);
+                    float W = Math.abs(a[0] - c[0]), H = Math.abs(a[1] - c[1]);
+                    if (W < 2.5f && H > 4) tv.add(new float[]{(a[0] + c[0]) / 2, Math.min(a[1], c[1]), Math.max(a[1], c[1])});
+                    else if (H < 2.5f && W > 4) th.add(new float[]{(a[1] + c[1]) / 2, Math.min(a[0], c[0]), Math.max(a[0], c[0])});
+                    else { seg(p0, p1); seg(p1, p2); seg(p2, p3); seg(p3, p0); }
+                }
+                @Override public void moveTo(float x, float y) { cur = start = new android.graphics.PointF(x, y); }
+                @Override public void lineTo(float x, float y) { android.graphics.PointF q = new android.graphics.PointF(x, y); if (cur != null) seg(cur, q); cur = q; }
+                @Override public void curveTo(float a, float b, float c, float e, float x, float y) { cur = new android.graphics.PointF(x, y); }
+                @Override public android.graphics.PointF getCurrentPoint() { return cur != null ? cur : new android.graphics.PointF(); }
+                @Override public void closePath() { if (cur != null && start != null) seg(cur, start); cur = start; }
+                @Override public void endPath() { done(false, false); }
+                @Override public void strokePath() { done(true, false); }
+                @Override public void fillPath(android.graphics.Path.FillType w) { done(false, true); }
+                @Override public void fillAndStrokePath(android.graphics.Path.FillType w) { done(true, true); }
+                @Override public void clip(android.graphics.Path.FillType w) {}
+                @Override public void drawImage(com.tom_roush.pdfbox.pdmodel.graphics.image.PDImage img) {}
+                @Override public void shadingFill(COSName n) {}
+                void go() throws IOException { processPage(getPage()); }
+            }.go();
+        } catch (Exception e) { e.printStackTrace(); }
+        return r;
     }
 }

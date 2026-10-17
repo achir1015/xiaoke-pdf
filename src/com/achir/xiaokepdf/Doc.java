@@ -113,6 +113,7 @@ public class Doc {
 
     // 文字
     private final Map<Integer, TextData.Page> text = new HashMap<>();
+    private final Map<Integer, Ops.Rules> rules = new HashMap<>();
     private PDDocument reader;
     private int readerGen = -1;
 
@@ -331,7 +332,7 @@ public class Doc {
     }
 
     private void changed() throws IOException {
-        synchronized (text) { text.clear(); closeReader(); }
+        synchronized (text) { text.clear(); rules.clear(); closeReader(); }
         openRenderer();
     }
 
@@ -553,6 +554,23 @@ public class Doc {
             }
             text.put(i, p);
             return p;
+        }
+    }
+
+    /** 頁面上的表格框線（顯示座標），就地編輯時用來限制在同一個儲存格。 */
+    public Ops.Rules rules(int i) {
+        synchronized (text) {
+            Ops.Rules r = rules.get(i);
+            if (r != null) return r;
+            if (broken) { r = new Ops.Rules(); rules.put(i, r); return r; }
+            try {
+                if (reader == null || readerGen != gen) { closeReader(); reader = load(); Watermark.fixToUnicode(reader); readerGen = gen; }
+                r = Ops.rules(reader, this, i);
+            } catch (Throwable e) {
+                r = new Ops.Rules();
+            }
+            rules.put(i, r);
+            return r;
         }
     }
 
