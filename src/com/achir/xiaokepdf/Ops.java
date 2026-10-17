@@ -307,6 +307,52 @@ public final class Ops {
         }
     }
 
+    /**
+     * 給繪製用的副本：把註解的一般外觀（印章、簽名、文字方塊、標示、圖形、表單欄位…）畫進頁面內容並移除註解。
+     * Android 15 起的 PdfRenderer 完全不畫註解，RenderParams 也只能打開文字註解與螢光標示。
+     */
+    static void flattenForRender(PDDocument d) {
+        for (PDPage p : d.getPages()) {
+            try {
+                List<PDAnnotation> keep = new ArrayList<>();
+                PDPageContentStream cs = null;
+                try {
+                    for (PDAnnotation a : p.getAnnotations()) {
+                        PDAppearanceStream as = a.isHidden() || a.isNoView() || a instanceof PDAnnotationLink
+                                || "Popup".equals(a.getSubtype()) ? null : a.getNormalAppearanceStream();
+                        PDRectangle r = a.getRectangle(), bb = as == null ? null : as.getBBox();
+                        if (r == null || bb == null || r.getWidth() <= 0 || r.getHeight() <= 0) { keep.add(a); continue; }
+                        // 外觀的 BBox 經過 /Matrix 後的外框，對應到註解的 /Rect（PDF 規範 12.5.5）
+                        Matrix m = as.getMatrix();
+                        float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE, maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
+                        for (float[] c : new float[][]{{bb.getLowerLeftX(), bb.getLowerLeftY()}, {bb.getUpperRightX(), bb.getLowerLeftY()},
+                                {bb.getLowerLeftX(), bb.getUpperRightY()}, {bb.getUpperRightX(), bb.getUpperRightY()}}) {
+                            float x = m.getValue(0, 0) * c[0] + m.getValue(1, 0) * c[1] + m.getValue(2, 0);
+                            float y = m.getValue(0, 1) * c[0] + m.getValue(1, 1) * c[1] + m.getValue(2, 1);
+                            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+                            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+                        }
+                        if (maxX - minX <= 0 || maxY - minY <= 0) { keep.add(a); continue; }
+                        float sx = r.getWidth() / (maxX - minX), sy = r.getHeight() / (maxY - minY);
+                        if (cs == null) cs = new PDPageContentStream(d, p, PDPageContentStream.AppendMode.APPEND, true, true);
+                        cs.saveGraphicsState();
+                        float ca = a.getCOSObject().getFloat(COSName.CA, 1f);
+                        if (ca < 1) {
+                            PDExtendedGraphicsState gs = new PDExtendedGraphicsState();
+                            gs.setStrokingAlphaConstant(ca);
+                            gs.setNonStrokingAlphaConstant(ca);
+                            cs.setGraphicsStateParameters(gs);
+                        }
+                        cs.transform(new Matrix(sx, 0, 0, sy, r.getLowerLeftX() - minX * sx, r.getLowerLeftY() - minY * sy));
+                        cs.drawForm(as);
+                        cs.restoreGraphicsState();
+                    }
+                } finally { if (cs != null) cs.close(); }
+                p.setAnnotations(keep);
+            } catch (Exception e) { e.printStackTrace(); }
+        }
+    }
+
     // ================================================================ 內容（文字、圖片）
 
     /** 顯示座標的矩形 → 方框座標（左下原點、向上）到 PDF 座標的轉換。off 為外觀串流的原點。 */
@@ -1541,7 +1587,7 @@ public final class Ops {
     /** 整份文件轉成影像（灰階或彩色），用於印刷或徹底移除內容。 */
     public static File rasterize(Doc doc, float dpi, boolean gray) throws Exception {
         File out = doc.temp("raster.pdf");
-        try (ParcelFileDescriptor pfd = ParcelFileDescriptor.open(doc.current(), ParcelFileDescriptor.MODE_READ_ONLY);
+        try (ParcelFileDescriptor pfd = ParcelFileDescriptor.open(doc.renderSource(), ParcelFileDescriptor.MODE_READ_ONLY);
              PDDocument d = PDDocument.load(doc.current(), Doc.mem())) {
             PdfRenderer r = new PdfRenderer(pfd);
             for (int i = 0; i < d.getNumberOfPages(); i++) {

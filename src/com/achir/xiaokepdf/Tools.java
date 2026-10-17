@@ -396,7 +396,7 @@ public final class Tools {
     static void exportImages(MainActivity a, Doc d, Uri tree, float dpi, boolean png, int[] pages) {
         U.run(a, "匯出圖片…", () -> {
             int count = 0;
-            try (ParcelFileDescriptor pfd = ParcelFileDescriptor.open(d.current(), ParcelFileDescriptor.MODE_READ_ONLY)) {
+            try (ParcelFileDescriptor pfd = ParcelFileDescriptor.open(d.renderSource(), ParcelFileDescriptor.MODE_READ_ONLY)) {
                 PdfRenderer r = new PdfRenderer(pfd);
                 int[] ps = pages;
                 if (ps == null) { ps = new int[r.getPageCount()]; for (int i = 0; i < ps.length; i++) ps[i] = i; }

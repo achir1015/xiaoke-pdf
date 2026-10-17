@@ -7,6 +7,7 @@ import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
+import android.os.Build;
 import android.os.ParcelFileDescriptor;
 
 import com.tom_roush.pdfbox.cos.COSArray;
@@ -498,7 +499,7 @@ public class Doc {
 
     private void openRenderer() throws IOException {
         File src = current();
-        if (!layers.isEmpty() && !broken) src = layerCopy();
+        if (!broken && (!layers.isEmpty() || needFlatten())) src = renderCopy();
         synchronized (rlock) {
             closeRenderer();
             pfd = ParcelFileDescriptor.open(src, ParcelFileDescriptor.MODE_READ_ONLY);
@@ -507,11 +508,22 @@ public class Doc {
         }
     }
 
-    private File layerCopy() throws IOException {
+    /** Android 15 起 PdfRenderer 不畫任何註解，要畫在繪製用的副本頁面內容裡。 */
+    static final boolean FLATTEN = Build.VERSION.SDK_INT >= 35;
+
+    private boolean needFlatten() {
+        if (!FLATTEN) return false;
+        for (List<Annot> l : annots) for (Annot x : l) if (x.index >= 0 && !x.hidden && !"Link".equals(x.sub)) return true;
+        return false;
+    }
+
+    /** 繪製用副本：套用圖層開關，必要時把註解畫進頁面。 */
+    private File renderCopy() throws IOException {
         File f = new File(dir, "render_" + System.nanoTime() % 100000 + ".pdf");
         try (PDDocument d = load()) {
             PDOptionalContentProperties ocp = d.getDocumentCatalog().getOCProperties();
             if (ocp != null) for (Map.Entry<String, Boolean> e : layers.entrySet()) ocp.setGroupEnabled(e.getKey(), e.getValue());
+            if (FLATTEN) Ops.flattenForRender(d);
             d.save(f);
         }
         File[] old = dir.listFiles();
@@ -520,6 +532,14 @@ public class Doc {
     }
 
     public void refreshLayers() throws IOException { openRenderer(); }
+
+    /** 匯出圖片、轉成影像用的來源檔：需要時是註解已畫進頁面的暫存副本。 */
+    public File renderSource() throws IOException {
+        if (broken || !needFlatten()) return current();
+        File f = temp("flat_export.pdf");
+        try (PDDocument d = load()) { Ops.flattenForRender(d); d.save(f); }
+        return f;
+    }
 
     private void closeRenderer() {
         try { if (renderer != null) renderer.close(); } catch (Exception ignored) {}
