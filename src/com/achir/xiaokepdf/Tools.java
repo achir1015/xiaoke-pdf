@@ -85,7 +85,7 @@ public final class Tools {
             new Tool("organize", "整理頁面", "頁面格狀・旋轉・刪除・插入・移動", "▦", 0xFF43A047, null, "organize pages rotate delete insert move 旋轉 刪除 插入 移動 頁面"),
             new Tool("split", "分割與擷取", "擷取頁面・每 N 頁分割・指定頁前分割", "✂", 0xFF00897B, null, "split extract 分割 擷取"),
             new Tool("comment", "新增註解", "便利貼・螢光標示・底線・圖形・手繪", "💬", 0xFFFB8C00, null, "comment annotate highlight note 註解 螢光 便利貼 手繪"),
-            new Tool("scan", "掃描與 OCR", "用相機掃描文件成 PDF", "⌗", 0xFF43A047, "OCR 文字辨識：開發中（預計 v1.2）", "scan camera ocr 掃描 相機 辨識"),
+            new Tool("scan", "掃描與 OCR", "用相機掃描文件成 PDF", "⌗", 0xFF43A047, "OCR 文字辨識：App 版開發中，線上版已可使用", "scan camera ocr 掃描 相機 辨識"),
             new Tool("protect", "保護 PDF", "密碼保護・權限・移除隱藏資訊", "🛡", 0xFF1E63E9, null, "protect password encrypt security 密碼 加密 權限 安全"),
             new Tool("redact", "塗銷 PDF", "框選或搜尋後永久移除內容", "▬", 0xFFE53935, null, "redact 塗銷 遮蔽 隱私"),
             new Tool("compress", "壓縮 PDF", "縮小圖片，讓檔案變小", "⇲", 0xFFE53935, null, "compress reduce size 壓縮 縮小"),
@@ -825,8 +825,8 @@ public final class Tools {
         U.choose(a, "掃描與 OCR", new String[]{"用相機掃描成 PDF", "從相簿圖片建立（文件增強）", "OCR 文字辨識（開發中）"}, i -> {
             if (i == 0) scanLoop(a, new ArrayList<>());
             else if (i == 1) Activities.pick(a, new String[]{"image/*"}, true, uris -> imagesToPdf(a, uris, true, true, "掃描文件.pdf"));
-            else U.alert(a, "OCR 文字辨識", "開發中，預計在 v1.2 推出。\n\n辨識需要在手機上執行的文字辨識模型，為了維持「文件不離開裝置」的原則，"
-                    + "不會把影像送到雲端。目前可以先用相機掃描成 PDF，並用「無障礙準備」設定標題與語言。");
+            else U.alert(a, "OCR 文字辨識", "App 版還在開發中。\n\n線上版已經可以辨識（直書、橫書都支援），辨識在瀏覽器裡進行，文件不會上傳：\n"
+                    + "https://achir1015.github.io/xiaoke-pdf/\n\n在「改原文字」工具裡按「文字辨識（OCR）」。辨識出的文字可以點選修改。");
         });
     }
 

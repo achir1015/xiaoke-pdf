@@ -1,6 +1,10 @@
 package com.achir.xiaokepdf;
 
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.net.Uri;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.RectF;
@@ -19,11 +23,13 @@ import android.widget.TextView;
 
 import java.util.List;
 
+import com.tom_roush.pdfbox.pdmodel.font.PDFont;
+
 /** 編輯工具列：編輯既有文字、新增文字 / 圖片 / 連結、浮水印、頁碼、頁面。 */
 public final class Editing {
     private Editing() {}
 
-    static final String[] NAMES = {"編輯文字", "新增文字", "插入表格", "新增圖片", "插入 QR Code", "新增連結", "浮水印", "移除浮水印", "頁首頁尾頁碼", "裁切", "整理頁面"};
+    static final String[] NAMES = {"編輯文字", "新增文字", "插入表格", "新增圖片", "插入 QR Code", "新增連結", "貼上", "浮水印", "移除浮水印", "頁首頁尾頁碼", "裁切", "整理頁面"};
     private static int current;
 
     public static void show(MainActivity a, LinearLayout bar) {
@@ -88,12 +94,57 @@ public final class Editing {
                             } catch (NumberFormatException e) { U.toast(a, "請輸入頁碼"); }
                         });
                     })); break;
-            case 6: Tools.watermark(a, d); break;
-            case 7: Tools.removeWatermark(a); break;
-            case 8: Tools.headerFooter(a, d); break;
-            case 9: Tools.crop(a, null); break;
-            case 10: Organizer.show(a); break;
+            case 6: pasteMode(a, d); break;
+            case 7: Tools.watermark(a, d); break;
+            case 8: Tools.removeWatermark(a); break;
+            case 9: Tools.headerFooter(a, d); break;
+            case 10: Tools.crop(a, null); break;
+            case 11: Organizer.show(a); break;
         }
+    }
+
+    /**
+     * 貼上剪貼簿：先讀剪貼簿，再點一下要放的位置。
+     * 圖片 → 圖片（可拖曳出大小）；網址 → 可點的連結文字；其他文字 → 文字（新增文字的樣式）。
+     */
+    static void pasteMode(MainActivity a, Doc d) {
+        ClipboardManager cm = (ClipboardManager) a.getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData clip = cm == null ? null : cm.getPrimaryClip();
+        if (clip == null || clip.getItemCount() == 0) { U.toast(a, "剪貼簿是空的"); return; }
+        ClipData.Item item = clip.getItemAt(0);
+        Uri uri = item.getUri();
+        String mime = clip.getDescription() != null && clip.getDescription().getMimeTypeCount() > 0 ? clip.getDescription().getMimeType(0) : "";
+        if (uri == null && item.getIntent() != null) uri = item.getIntent().getData();
+        if (uri != null && (mime.startsWith("image/") || mime.equals("text/uri-list") || String.valueOf(a.getContentResolver().getType(uri)).startsWith("image/"))) {
+            final Uri u = uri;
+            U.run(a, "讀取圖片…", () -> Tools.decode(a, u, 2000), b -> Tools.place(a, "點一下要貼上圖片的位置（或拖曳出大小）", b.getWidth() / (float) b.getHeight(), 200, false,
+                    (p, r) -> a.edit("貼上圖片", Doc.K_EDIT, pd -> Ops.addImage(pd, d, p, r, b, 1))));
+            return;
+        }
+        CharSequence cs = item.coerceToText(a);
+        final String text = cs == null ? "" : cs.toString().replace("\r\n", "\n").replace('\r', '\n').trim();
+        if (text.isEmpty()) { U.toast(a, "剪貼簿裡沒有可以貼上的文字或圖片"); return; }
+        final boolean url = !text.contains("\n") && text.matches("(?i)^(https?://|www\\.)\\S+$");
+        a.setMode(new MainActivity.Mode() {
+            @Override public void tap(int page, float x, float y) {
+                a.exitModes();
+                TextStyle st = TextStyle.load(a, "add");
+                st.lineHeight = 0;
+                a.edit(url ? "貼上連結" : "貼上文字", Doc.K_EDIT, pd -> {
+                    float wrapW = Math.max(80, d.dw(page) - x - 24);
+                    float top = y - st.size * 0.5f;      // 點的位置是第一行字的中間
+                    Ops.addText(pd, d, page, new RectF(x, top, x + wrapW, top + st.size), text, st);
+                    if (url) {
+                        PDFont f = st.pdfFont(pd, text);
+                        float w = 0;
+                        try { w = f != null ? f.getStringWidth(text) / 1000 * st.size : 0; } catch (Exception e) { w = 0; }
+                        if (w <= 0) w = text.length() * st.size * 0.55f;
+                        String link = text.toLowerCase(java.util.Locale.ROOT).startsWith("www.") ? "https://" + text : text;
+                        Ops.addLink(pd, d, page, new RectF(x, top, x + Math.min(w + 2, wrapW), top + st.size * 1.3f), link, -1);
+                    }
+                });
+            }
+        }, PdfView.T_POINT, url ? "點一下要貼上連結的位置" : "點一下要貼上文字的位置", null, null);
     }
 
     /** 點一下頁面上的文字 → 原本的位置直接變成編輯框（像 Word 一樣，整段一起改）。 */
