@@ -92,6 +92,9 @@ function styleText(node, el, z, editing, linkEl) {
   st.textDecorationThickness = Math.max(1, el.size * 0.06 * z) + 'px';
   st.textUnderlineOffset = el.size * 0.12 * z + 'px';
   node.style.width = ''; node.style.height = '';
+  // 表格儲存格裡的文字：固定寬度、自動換行（和匯出 PDF 的換行一致）
+  if (el.maxW) { st.whiteSpace = 'pre-wrap'; st.overflowWrap = 'anywhere'; st.width = el.maxW * z + 'px'; }
+  else { st.whiteSpace = ''; st.overflowWrap = ''; st.width = ''; }
   if (!editing && c.textContent !== el.text) c.textContent = el.text;
   c.contentEditable = editing ? 'plaintext-only' : 'false';
   node.classList.toggle('editing', !!editing);

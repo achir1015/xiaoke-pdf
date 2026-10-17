@@ -105,7 +105,8 @@ function drawLines(doc, page, g, x, y, opt, fontInfo) {
       PDFOperator.of('w', [doc.context.obj(opt.size * 0.03)]),
       PDFOperator.of('RG', [c.red, c.green, c.blue].map(v => doc.context.obj(v))));
   }
-  String(opt.text).split('\n').forEach((line, i) => {
+  const lines = opt.maxW ? wrapLines(font, String(opt.text), opt.size, opt.maxW) : String(opt.text).split('\n');
+  lines.forEach((line, i) => {
     const lw = font.widthOfTextAtSize(line, opt.size);
     const dx = opt.align === 'center' ? (opt.width - lw) / 2 : opt.align === 'right' ? opt.width - lw : 0;
     const by = y + base + i * lh;            // 這一行基線的顯示座標
@@ -124,13 +125,31 @@ function drawLines(doc, page, g, x, y, opt, fontInfo) {
   if (opt.bold) page.pushOperators(PDFOperator.of('Tr', [doc.context.obj(0)]));
 }
 
+/** 依寬度斷行（中文逐字、英文在空白處），和瀏覽器 pre-wrap + overflow-wrap:anywhere 的結果相近 */
+export function wrapLines(font, text, size, maxW) {
+  const out = [];
+  for (const para of text.split('\n')) {
+    let cur = '';
+    for (const ch of para) {
+      const next = cur + ch;
+      if (cur && font.widthOfTextAtSize(next, size) > maxW) {
+        const sp = cur.lastIndexOf(' ');
+        if (/\S/.test(ch) && !/[⺀-￿]/.test(ch) && sp > 0) { out.push(cur.slice(0, sp)); cur = cur.slice(sp + 1) + ch; }
+        else { out.push(cur); cur = ch === ' ' ? '' : ch; }
+      } else cur = next;
+    }
+    out.push(cur);
+  }
+  return out;
+}
+
 function drawTextElement(doc, page, g, el, fontInfo) {
   if (el.patch) drawBox(page, g, el.patch, el.patch.color || '#ffffff');   // 先蓋掉原本那行字
   if (el.bgColor) drawBox(page, g, el, el.bgColor);
   if (!el.text) return;
   drawLines(doc, page, g, el.x, el.y, {
     text: fontInfo.text, size: el.size, lineHeight: el.lineHeight, color: el.color, bold: el.bold,
-    underline: el.underline, strike: el.strike, align: el.align, width: el.w,
+    underline: el.underline, strike: el.strike, align: el.align, width: el.w, maxW: el.maxW,
   }, fontInfo);
 }
 

@@ -9,7 +9,7 @@ import { PALETTE, textPng } from './style.js';
 import { loadLib } from './core.js';
 import { Inline } from './inline.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
 const REPO = 'achir1015/xiaoke-pdf';
 
 // ================================================================ 搜尋

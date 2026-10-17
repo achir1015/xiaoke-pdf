@@ -24,6 +24,7 @@ export class Doc {
     this.pages = [];             // {w, h, rotate, view}
     this.labels = null;
     this.textCache = new Map();
+    this.rulesCache = new Map();
     this.annotCache = new Map();
     this.ocConfig = null;
     this.gen = 0;
@@ -79,6 +80,7 @@ export class Doc {
     this.pdf = await openPdfjs(this.current);
     this.gen++;
     this.textCache.clear();
+    this.rulesCache.clear();
     this.annotCache.clear();
     const n = this.pdf.numPages;
     const pages = new Array(n);
@@ -141,6 +143,56 @@ export class Doc {
   async redo() { if (this.pos + 1 >= this.steps.length) return false; this.pos++; await this.load(); await this.persist(); return true; }
 
   /** 顯示座標的文字：[{str, x, y, w, h, size, chars:[{c,x,w}]}]，按閱讀順序 */
+  /** 頁面上畫的直線、橫線（表格框線），顯示座標：{ v: [{x, y1, y2}], h: [{y, x1, x2}] } */
+  async rules(i) {
+    if (this.rulesCache.has(i)) return this.rulesCache.get(i);
+    const out = { v: [], h: [] };
+    try {
+      const page = await this.pdf.getPage(i + 1);
+      const vp = baseViewport(page);
+      const OPS = window.pdfjsLib.OPS, U = window.pdfjsLib.Util;
+      const ol = await page.getOperatorList();
+      let ctm = [1, 0, 0, 1, 0, 0];
+      const stack = [];
+      const pt = (x, y) => U.applyTransform(U.applyTransform([x, y], ctm), vp.transform);
+      const seg = (a, b) => {
+        const [x1, y1] = a, [x2, y2] = b;
+        if (Math.abs(x1 - x2) < 1.5 && Math.abs(y1 - y2) > 4) out.v.push({ x: (x1 + x2) / 2, y1: Math.min(y1, y2), y2: Math.max(y1, y2) });
+        else if (Math.abs(y1 - y2) < 1.5 && Math.abs(x1 - x2) > 4) out.h.push({ y: (y1 + y2) / 2, x1: Math.min(x1, x2), x2: Math.max(x1, x2) });
+      };
+      const rect = (x, y, w, h) => {
+        const a = pt(x, y), b = pt(x + w, y), c = pt(x + w, y + h), d = pt(x, y + h);
+        const W = Math.abs(a[0] - c[0]), H = Math.abs(a[1] - c[1]);
+        // 細長的實心矩形＝一條線；一般矩形＝四個邊
+        if (W < 2.5 && H > 4) seg([(a[0] + c[0]) / 2, a[1]], [(a[0] + c[0]) / 2, c[1]]);
+        else if (H < 2.5 && W > 4) seg([a[0], (a[1] + c[1]) / 2], [c[0], (a[1] + c[1]) / 2]);
+        else { seg(a, b); seg(b, c); seg(c, d); seg(d, a); }
+      };
+      for (let k = 0; k < ol.fnArray.length; k++) {
+        const fn = ol.fnArray[k], args = ol.argsArray[k];
+        if (fn === OPS.save) stack.push(ctm);
+        else if (fn === OPS.restore) ctm = stack.pop() || ctm;
+        else if (fn === OPS.transform) ctm = U.transform(ctm, args);
+        else if (fn === OPS.paintFormXObjectBegin) { stack.push(ctm); if (args[0]) ctm = U.transform(ctm, args[0]); }
+        else if (fn === OPS.paintFormXObjectEnd) ctm = stack.pop() || ctm;
+        else if (fn === OPS.constructPath) {
+          const [sub, co] = args;
+          let j = 0, cur = null, start = null;
+          for (const op of sub) {
+            if (op === OPS.rectangle) { rect(co[j], co[j + 1], co[j + 2], co[j + 3]); j += 4; }
+            else if (op === OPS.moveTo) { cur = start = pt(co[j], co[j + 1]); j += 2; }
+            else if (op === OPS.lineTo) { const p = pt(co[j], co[j + 1]); if (cur) seg(cur, p); cur = p; j += 2; }
+            else if (op === OPS.curveTo) { cur = pt(co[j + 4], co[j + 5]); j += 6; }
+            else if (op === OPS.curveTo2 || op === OPS.curveTo3) { cur = pt(co[j + 2], co[j + 3]); j += 4; }
+            else if (op === OPS.closePath) { if (cur && start) seg(cur, start); cur = start; }
+          }
+        }
+      }
+    } catch (e) { console.warn('rules', e); }
+    this.rulesCache.set(i, out);
+    return out;
+  }
+
   async text(i) {
     if (this.textCache.has(i)) return this.textCache.get(i);
     const page = await this.pdf.getPage(i + 1);

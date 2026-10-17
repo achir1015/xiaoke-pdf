@@ -54,6 +54,8 @@ export class TextElement extends PageElement {
     this.align = o.align ?? 'left';           // left | center | right（多行時的對齊）
     // 「編輯原文字」時要蓋掉的原始區域（顯示座標），null＝單純新增的文字
     this.patch = o.patch ? { ...o.patch } : null;
+    // 自動換行的寬度（pt）；null＝不換行。表格儲存格裡的文字用格子寬度
+    this.maxW = o.maxW ?? null;
   }
   get resizable() { return false; }           // 文字大小由字級決定，寬高自動量測
   get label() { return this.patch ? '修改的文字' : '文字'; }

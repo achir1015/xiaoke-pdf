@@ -166,6 +166,7 @@ export class DocumentView {
         s.canvas.getContext('2d', { willReadFrequently: true }).drawImage(off, 0, 0);
         s.renderedScale = scale;
         s.root.classList.add('rendered');
+        if (this.hitsOn) this.refreshHits();       // 畫好後才能找表格框線，重新拆行
       } catch (e) {
         if (e?.name !== 'RenderingCancelledException') console.warn('繪製失敗', i, e);
       }
@@ -257,6 +258,7 @@ export class DocumentView {
     for (const s of this.shells) {
       s.hits.innerHTML = '';
       if (!this.hitsOn || !s.lines) continue;
+      if (!s.lines.split && s.renderedScale) s.lines = this.splitAtRules(s.index, s.lines);
       const patches = this.session.elementsOn(s.index).filter(e => e.patch).map(e => e.patch);
       const z = this.zoom;
       s.lines.forEach((l, k) => {
@@ -331,6 +333,85 @@ export class DocumentView {
     const x = Math.max(0, Math.floor(rect.x * k)), y = Math.max(0, Math.floor(rect.y * k));
     const w = Math.max(1, Math.min(s.canvas.width - x, Math.ceil(rect.w * k))), h = Math.max(1, Math.min(s.canvas.height - y, Math.ceil(rect.h * k)));
     try { return s.canvas.getContext('2d', { willReadFrequently: true }).getImageData(x, y, w, h); } catch (e) { return null; }
+  }
+
+  /**
+   * 文字所在的表格儲存格（顯示座標）：從畫好的頁面找左右的直框線、上下的橫框線。
+   * 不在表格裡（找不到四邊框線）回傳 null。
+   */
+  /** 讀出已繪製頁面的像素，提供找框線用的函式 */
+  _pix(i) {
+    const s = this.shells[i];
+    if (!s || !s.renderedScale) return null;
+    const g = s.g, k = s.canvas.width / g.width;
+    const img = this.samplePixels(i, { x: 0, y: 0, w: g.width, h: g.height });
+    if (!img) return null;
+    const { data, width: W, height: H } = img;
+    const lum = (x, y) => {
+      const px = Math.round(x * k), py = Math.round(y * k);
+      if (px < 0 || py < 0 || px >= W || py >= H) return 765;
+      const o = (py * W + px) * 4;
+      return data[o] + data[o + 1] + data[o + 2];
+    };
+    const ink = (x, y) => lum(x, y) < 600;
+    // 細線：本身是深色，旁邊 3pt 有一側明顯比較亮
+    const thinV = (x, y) => ink(x, y) && (lum(x - 3, y) - lum(x, y) > 90 || lum(x + 3, y) - lum(x, y) > 90);
+    const thinH = (x, y) => ink(x, y) && (lum(x, y - 3) - lum(x, y) > 90 || lum(x, y + 3) - lum(x, y) > 90);
+    const step = Math.min(0.5, 1 / k);
+    // x 處有一條穿過這行文字上下的直線
+    const vRule = (line, x) => [0, 0.25, 0.5, 0.75, 1].map(f => line.y - line.h * 0.15 + f * line.h * 1.3)
+      .every(y => thinV(x, y) || thinV(x - step, y) || thinV(x + step, y));
+    return { g, thinH, step, vRule };
+  }
+
+  /** 同一行裡被表格直框線隔開的片段拆成不同行（例如「6」和隔壁格的文字） */
+  splitAtRules(i, lines) {
+    const P = this._pix(i);
+    if (!P) return lines;
+    const out = [];
+    for (const l of lines) {
+      if (!l.parts || l.parts.length < 2) { out.push(l); continue; }
+      const groups = [[l.parts[0]]];
+      for (let j = 1; j < l.parts.length; j++) {
+        const a = l.parts[j - 1], b = l.parts[j];
+        let cut = false;
+        for (let x = a.x + a.w; x <= b.x && !cut; x += P.step) cut = P.vRule(l, x);
+        if (cut) groups.push([b]); else groups[groups.length - 1].push(b);
+      }
+      if (groups.length === 1) { out.push(l); continue; }
+      for (const gp of groups) {
+        const x = gp[0].x, x2 = Math.max(...gp.map(q => q.x + q.w));
+        let text = '';
+        gp.forEach((q, j) => {
+          if (j && q.x - (gp[j - 1].x + gp[j - 1].w) > l.size * 0.2 && !/\s$/.test(text) && !/^\s/.test(q.text)) text += ' ';
+          text += q.text;
+        });
+        text = text.trim();
+        if (text) out.push({ ...l, x, w: x2 - x, text, parts: gp });
+      }
+    }
+    out.split = true;
+    return out;
+  }
+
+  cellAt(i, line) {
+    const P = this._pix(i);
+    if (!P) return null;
+    const { g, thinH, step } = P;
+    const vRule = x => P.vRule(line, x);
+    let x1 = null, x2 = null;
+    for (let x = line.x - 0.5; x > 0; x -= step) if (vRule(x)) { x1 = x; break; }
+    // 從字的中間往右找（原本的字可能已經超出格子）
+    for (let x = line.x + Math.min(line.w, line.size) + 0.5; x < g.width; x += step) if (vRule(x)) { x2 = x; break; }
+    if (x1 == null || x2 == null || x2 - x1 < line.size) return null;
+    const xs = Array.from({ length: 9 }, (_, j) => x1 + 3 + (x2 - x1 - 6) * j / 8);
+    const hRule = y => xs.every(x => thinH(x, y) || thinH(x, y - step) || thinH(x, y + step));
+    let y1 = null, y2 = null;
+    const lim = line.size * 25;
+    for (let y = line.y - 0.5; y > Math.max(0, line.y - lim); y -= step) if (hRule(y)) { y1 = y; break; }
+    for (let y = line.y + line.h + 0.5; y < Math.min(g.height, line.y + lim); y += step) if (hRule(y)) { y2 = y; break; }
+    if (y1 == null || y2 == null) return null;
+    return { x1, x2, y1, y2 };
   }
 
   // ================================================================ 指標操作（滑鼠、觸控筆、手指）

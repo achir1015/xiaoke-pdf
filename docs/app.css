@@ -235,3 +235,4 @@ a { color: var(--accent); }
 .hint.fmt .btn { flex: none; white-space: nowrap; }
 .fswatch { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--surface); border-bottom: 1px solid var(--line); overflow-x: auto; }
 .fswatch .swatch { flex: none; margin: 0; }
+.page .inline-ed.over { outline: 2px solid #e53935; }

@@ -177,17 +177,43 @@ export class App {
     this.view.beginEdit(el.id);
   }
 
-  /** 「改原文字」：點到一行原始文字 → 蓋掉原字 + 放一段可編輯的新文字 */
+  /**
+   * 「改原文字」：點到一行原始文字 → 蓋掉原字 + 放一段可編輯的新文字。
+   * 在表格裡：同一格的幾行一起編輯，新文字在格子寬度內自動換行，不會跨到隔壁格。
+   */
   replaceLine(pageIndex, line) {
-    const sampled = this.sampleColor(pageIndex, line);
-    const size = Math.round(line.size * 10) / 10;
-    const lineHeight = 1.3;
+    const cell = this.view.cellAt(pageIndex, line);
+    let lines = [line];
+    if (cell) {
+      const all = this.view.shells[pageIndex].lines || [line];
+      lines = all.filter(l => {
+        const cx = l.x + l.w / 2, cy = l.y + l.h / 2;
+        return cx > cell.x1 && cx < cell.x2 && cy > cell.y1 && cy < cell.y2 && Math.abs(l.size - line.size) <= line.size * 0.2;
+      }).sort((a, b) => a.baseline - b.baseline || a.x - b.x);
+      if (!lines.includes(line)) lines = [line];
+    }
+    const first = lines[0];
+    const x1 = Math.min(...lines.map(l => l.x)), y1 = Math.min(...lines.map(l => l.y));
+    const area = { x: x1, y: y1, w: Math.max(...lines.map(l => l.x + l.w)) - x1, h: Math.max(...lines.map(l => l.y + l.h)) - y1 };
+    const sampled = this.sampleColor(pageIndex, area);
+    const size = Math.round(Math.max(...lines.map(l => l.size)) * 10) / 10;
+    // 多行時沿用原本的行距（基線間距），否則 1.3 倍
+    const lineHeight = lines.length > 1
+      ? Math.max(1.05, Math.round((lines[lines.length - 1].baseline - first.baseline) / (lines.length - 1) / size * 100) / 100)
+      : 1.3;
     const ratio = fonts.baselineRatio('huninn', lineHeight);
     const pad = Math.max(1, size * 0.08);
+    // 段落文字：中文之間直接相接，英文之間補空白
+    let text = '';
+    for (const l of lines) {
+      if (text && !/[⺀-￿]$/.test(text) && !/^[⺀-￿]/.test(l.text)) text += ' ';
+      text += l.text;
+    }
+    const maxW = cell ? Math.max(size * 2, cell.x2 - Math.max(2, x1 - cell.x1) - x1) : null;
     const el = new TextElement({
-      pageIndex, x: line.x, y: line.baseline - ratio * size, text: line.text, font: 'huninn', size, lineHeight,
+      pageIndex, x: x1, y: first.baseline - ratio * size, text, font: 'huninn', size, lineHeight, maxW,
       color: sampled?.ink || '#1d1f23',
-      patch: { x: line.x - pad, y: line.y - pad, w: line.w + pad * 2, h: line.h + pad * 2, color: sampled?.bg || '#ffffff' },
+      patch: { x: area.x - pad, y: area.y - pad, w: area.w + pad * 2, h: area.h + pad * 2, color: sampled?.bg || '#ffffff' },
     });
     this.session.add(el, '修改原文字');
     this.view.beginEdit(el.id);

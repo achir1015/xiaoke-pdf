@@ -19,8 +19,10 @@ export class Inline {
   // ---------------------------------------------------------------- 找段落
 
   /** 把頁面文字分成行：[{items, x1, x2, top, bottom, size, base}] */
-  async lines(page) {
-    const items = (await this.app.doc.text(page)).filter(i => !i.vertical && i.str.length);
+  async lines(page, cell) {
+    let items = (await this.app.doc.text(page)).filter(i => !i.vertical && i.str.length);
+    // 在表格裡：只看同一格的字（中心點在格子內）
+    if (cell) items = items.filter(i => i.x + i.w / 2 > cell.x1 && i.x + i.w / 2 < cell.x2 && i.y + i.h / 2 > cell.y1 && i.y + i.h / 2 < cell.y2);
     items.sort((a, b) => (a.y + a.h / 2) - (b.y + b.h / 2) || a.x - b.x);
     const lines = [];
     for (const it of items) {
@@ -45,8 +47,22 @@ export class Inline {
   }
 
   /** 點到的段落（連續、字級相同、行距一致、左右對齊相近的行） */
+  /** 點到的位置所在的表格儲存格（左右上下都有框線才算）；不在表格裡回傳 null */
+  async cellAt(page, x, y) {
+    const { v, h } = await this.app.doc.rules(page);
+    const tol = 1.5;
+    let x1 = -Infinity, x2 = Infinity, y1 = -Infinity, y2 = Infinity;
+    for (const l of v) if (y >= l.y1 - tol && y <= l.y2 + tol) { if (l.x <= x && l.x > x1) x1 = l.x; if (l.x >= x && l.x < x2) x2 = l.x; }
+    if (!isFinite(x1) || !isFinite(x2)) return null;
+    const mx = (x1 + x2) / 2;
+    for (const l of h) if (l.x1 <= Math.min(x, mx) + tol && l.x2 >= Math.max(x, mx) - tol) { if (l.y <= y && l.y > y1) y1 = l.y; if (l.y >= y && l.y < y2) y2 = l.y; }
+    if (!isFinite(y1) || !isFinite(y2)) return null;
+    return { x1, x2, y1, y2 };
+  }
+
   async findBlock(page, x, y) {
-    const lines = await this.lines(page);
+    const cell = await this.cellAt(page, x, y);
+    const lines = await this.lines(page, cell);
     let idx = lines.findIndex(l => y >= l.top - 2 && y <= l.bottom + 2 && x >= l.x1 - 4 && x <= l.x2 + 4);
     if (idx < 0) return null;
     const ok = (a, b, pitch) => Math.abs(a.size - b.size) <= a.size * 0.15
@@ -76,14 +92,15 @@ export class Inline {
       }
       text += t;
     });
+    const size = Math.max(...blk.map(l => l.size));
     const area = { x: Math.min(...blk.map(l => l.x1)), y: Math.min(...blk.map(l => l.top)), w: 0, h: 0 };
     area.w = Math.max(...blk.map(l => l.x2)) - area.x;
     area.h = Math.max(...blk.map(l => l.bottom)) - area.y;
-    const size = Math.max(...blk.map(l => l.size));
     // 像 Word 一樣：換行寬度用整個文字欄（頁面上最右邊的文字），不是原本這行字的寬度
-    const right = Math.max(...lines.map(l => l.x2), area.x + area.w);
-    const wrapW = Math.max(area.w, Math.min(right, this.app.doc.pages[page].w - 18) - area.x);
-    return { page, area, wrapW, text, caret, size, base: blk[0].base, lineHeight: blk.length > 1 ? (blk[blk.length - 1].base - blk[0].base) / (blk.length - 1) : size * 1.25 };
+    // 在表格裡：換行寬度＝儲存格寬（扣掉內距），文字不會超出格子
+    const right = cell ? cell.x2 - Math.max(2, area.x - cell.x1) : Math.min(Math.max(...lines.map(l => l.x2), area.x + area.w), this.app.doc.pages[page].w - 18);
+    const wrapW = cell ? Math.max(size * 2, right - area.x) : Math.max(area.w, right - area.x);
+    return { page, area, wrapW, cell, text, caret, size, base: blk[0].base, lineHeight: blk.length > 1 ? (blk[blk.length - 1].base - blk[0].base) / (blk.length - 1) : size * 1.25 };
   }
 
   // ---------------------------------------------------------------- 取色（直接讀畫面上已繪製的頁面）
@@ -130,7 +147,7 @@ export class Inline {
     if (!blk) return this.addAt(page, x, y);
     const col = this.sampleColors(page, blk.area);
     const st = { family: loadStyle('edit').family, size: Math.round(blk.size * 10) / 10, color: col.fg, bg: null, bold: false, underline: false, strike: false };
-    this.open({ mode: 'edit', page, area: blk.area, wrapW: blk.wrapW, text: blk.text, caret: blk.caret, base: blk.base, lineHeight: blk.lineHeight, st, mask: col.bg });
+    this.open({ mode: 'edit', page, area: blk.area, wrapW: blk.wrapW, cell: blk.cell, text: blk.text, caret: blk.caret, base: blk.base, lineHeight: blk.lineHeight, st, mask: col.bg });
   }
 
   async addAt(page, x, y) {
@@ -202,6 +219,10 @@ export class Inline {
     });
     ta.style.height = '0px';
     ta.style.height = Math.max(ta.scrollHeight, lh * sc) + 'px';
+    // 在表格裡：文字超出儲存格下緣時用紅框提醒（可以縮小字級或刪短文字）
+    const over = !!c.cell && r.y + ta.offsetHeight > v.toCss(c.page, { x: c.cell.x1, y: c.cell.y2, w: 1, h: 1 }).y + 2;
+    ta.classList.toggle('over', over);
+    ta.title = over ? '文字超出表格儲存格，請縮小字級或刪短文字' : '';
     // 遮住原本的文字
     if (c.mode === 'edit') {
       const m = v.toCss(c.page, { x: c.area.x - 1.5, y: c.area.y - 1.5, w: c.area.w + 3, h: c.area.h + 3 });

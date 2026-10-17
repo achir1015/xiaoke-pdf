@@ -106,15 +106,18 @@ export class PdfRenderer {
         const gap = it.x - (last.x + last.w);
         if (gap > it.size * 0.2 && !/\s$/.test(last.text) && !/^\s/.test(it.text)) last.text += ' ';
         last.text += it.text;
+        last.parts.push({ x: it.x, w: it.w, text: it.text });
         last.w = Math.max(last.w, it.x + it.w - last.x);
         last.asc = Math.max(last.asc, it.asc); last.desc = Math.min(last.desc, it.desc);
       } else {
-        lines.push({ ...it });
+        lines.push({ ...it, parts: [{ x: it.x, w: it.w, text: it.text }] });
       }
     }
     const out = lines.map(l => ({
       x: l.x, y: l.baseline - l.size * l.asc, w: l.w, h: l.size * (l.asc - l.desc),
       size: l.size, baseline: l.baseline, text: normalizeCjk(l.text).replace(/\s+$/, ''),
+      // 組成這行的片段（表格裡跨格的片段之後會依框線拆開）
+      parts: l.parts.map(q => ({ ...q, text: normalizeCjk(q.text) })),
     }));
     this._text.set(i, out);
     return out;
