@@ -7,9 +7,24 @@ DARK = {"bg": "#1B1C1F", "surface": "#232428", "card": "#2B2D31", "text": "#E8E9
         "accent": "#6EA2FF", "accent_soft": "#263552", "page_bg": "#111214", "danger": "#FF6B6B", "hover": "#30323A"}
 
 C = dict(LIGHT)
+SCALE = 1.8          # 介面字級倍率（設定裡可以調整；預設比一般大 80%，比較好閱讀）
+SCALES = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2]
 
 
-def apply(app, dark):
+def pt(n):
+    """依介面字級倍率換算的字級（點）"""
+    return max(1, round(n * SCALE))
+
+
+def px(n):
+    """依介面字級倍率換算的大小（像素）"""
+    return int(round(n * SCALE))
+
+
+def apply(app, dark, scale=None):
+    global SCALE
+    if scale:
+        SCALE = scale
     C.clear()
     C.update(DARK if dark else LIGHT)
     pal = QPalette()
@@ -27,7 +42,7 @@ def apply(app, dark):
     pal.setColor(QPalette.PlaceholderText, QColor(C["sub"]))
     app.setPalette(pal)
     # 介面字型用 setFont（不寫在樣式表裡，就地編輯框才能用自己的字型與大小）
-    f = QFont("Microsoft JhengHei UI", 10)
+    f = QFont("Microsoft JhengHei UI", pt(10))
     f.setFamilies(["Microsoft JhengHei UI", "Microsoft JhengHei", "Segoe UI", "Segoe UI Symbol", "Segoe UI Emoji"])
     app.setFont(f)
     # Windows 會替某些元件類別另外指定字型（清單、選單、面板標題…），統一成同一個字級
@@ -76,5 +91,5 @@ def qss():
     QFrame#hint { background: %(accent_soft)s; }
     QFrame#card { background: %(card)s; border: 1px solid %(line)s; border-radius: 10px; }
     QLabel#sub { color: %(sub)s; }
-    QLabel#title { font-size: 16pt; font-weight: bold; }
-    """ % C
+    QLabel#title { font-size: %(title)dpt; font-weight: bold; }
+    """ % dict(C, title=pt(16))

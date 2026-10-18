@@ -24,6 +24,7 @@ from ..engine import signing as SG
 from ..engine import text as T
 from ..engine import watermark as WM
 from ..engine.session import K_ANNOT, K_EDIT, K_FORM, K_PAGES, K_PRINT, Session
+from . import theme
 from .viewer import T_ELLIPSE, T_INK, T_LINE, T_NONE, T_POINT, T_RECT
 
 IMG_FILTER = "圖片 (*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff *.webp)"
@@ -103,7 +104,7 @@ class Form(QDialog):
     def __init__(self, parent, title, note=None, ok="確定"):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(440)
+        self.setMinimumWidth(theme.px(440))
         self.v = QVBoxLayout(self)
         self.form = QFormLayout()
         self.form.setLabelAlignment(Qt.AlignRight)
@@ -161,7 +162,7 @@ class Form(QDialog):
 
 def color_button(initial):
     b = QPushButton()
-    b.setFixedWidth(60)
+    b.setFixedWidth(theme.px(60))
     b._color = QColor(initial)
 
     def paint():
@@ -188,7 +189,7 @@ class SignPad(QDialog):
         self.cur = None
         v = QVBoxLayout(self)
         self.pad = QWidget()
-        self.pad.setMinimumSize(560, 220)
+        self.pad.setMinimumSize(theme.px(560), theme.px(220))
         self.pad.setStyleSheet("background: white; border: 1px solid #ccc;")
         self.pad.paintEvent = self._paint
         self.pad.mousePressEvent = lambda e: self._start(e.position())
@@ -1335,11 +1336,18 @@ class Tools:
         dark = f.check("深色主題", p.get("dark", False))
         upd = f.check("啟動時自動檢查更新", p.get("auto_update", True))
         panels = f.check("開啟文件時顯示側邊面板", p.get("panels", True))
+        cur = p.get("ui_scale", 1.8)
+        names = ["%d%%" % round(x * 100) for x in theme.SCALES]
+        size = f.combo("介面字級", names, theme.SCALES.index(cur) if cur in theme.SCALES else 4)
         if not f.run():
             return
         p.set("author", author.text().strip() or "小柯")
         p.set("auto_update", upd.isChecked())
         p.set("panels", panels.isChecked())
+        new = theme.SCALES[size.currentIndex()]
+        if new != p.get("ui_scale", 1.8):
+            p.set("ui_scale", new)
+            QMessageBox.information(self.win, "介面字級", "介面字級已改成 %d%%，重新開啟程式後全部生效。" % round(new * 100))
         if dark.isChecked() != p.get("dark", False):
             self.win.toggle_theme()
 

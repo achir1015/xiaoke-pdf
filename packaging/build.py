@@ -20,11 +20,11 @@ def version_info():
     txt = """VSVersionInfo(
   ffi=FixedFileInfo(filevers=%(t)s, prodvers=%(t)s, mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[StringFileInfo([StringTable('040404B0', [
-    StringStruct('CompanyName', 'Achir'),
+    StringStruct('CompanyName', '吳玉柱'),
     StringStruct('FileDescription', '%(name)s'),
     StringStruct('FileVersion', '%(v)s'),
     StringStruct('InternalName', 'XiaoKePdf'),
-    StringStruct('LegalCopyright', 'AGPL-3.0'),
+    StringStruct('LegalCopyright', 'Copyright © 2026 吳玉柱（achir1015@gmail.com），AGPL-3.0'),
     StringStruct('OriginalFilename', 'XiaoKePdf.exe'),
     StringStruct('ProductName', '%(name)s'),
     StringStruct('ProductVersion', '%(v)s')])]),

@@ -1,5 +1,7 @@
-小柯文件PDF助手（Windows 版）授權說明
+﻿小柯文件PDF助手（Windows 版）授權說明
 ====================================
+
+開發者：吳玉柱（achir1015@gmail.com）
 
 本程式免費、開放原始碼，原始碼在 https://github.com/achir1015/xiaoke-pdf 。
 

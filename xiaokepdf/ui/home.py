@@ -19,14 +19,14 @@ class Card(QFrame):
         v.setContentsMargins(14, 12, 14, 12)
         t = QLabel(("%s  %s" % (icon, title)).strip())
         f = t.font()
-        f.setPointSize(11)
+        f.setPointSize(theme.pt(11))
         f.setBold(True)
         t.setFont(f)
         d = QLabel(desc, objectName="sub")
         d.setWordWrap(True)
         v.addWidget(t)
         v.addWidget(d)
-        self.setMinimumHeight(78)
+        self.setMinimumHeight(theme.px(78))
 
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
@@ -56,7 +56,7 @@ class Home(QScrollArea):
         win = self.win
         head = QHBoxLayout()
         logo = QLabel()
-        logo.setPixmap(QPixmap(resource("assets", "icon.png")).scaled(72, 72, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setPixmap(QPixmap(resource("assets", "icon.png")).scaled(theme.px(72), theme.px(72), Qt.KeepAspectRatio, Qt.SmoothTransformation))
         head.addWidget(logo)
         tv = QVBoxLayout()
         title = QLabel("歡迎使用" + APP_NAME, objectName="title")
@@ -68,19 +68,19 @@ class Home(QScrollArea):
 
         search = QLineEdit()
         search.setPlaceholderText("⌕  尋找工具與指令（Ctrl+K）")
-        search.setMinimumHeight(38)
+        search.setMinimumHeight(theme.px(38))
         search.textChanged.connect(lambda t: (win.palette_with(t), search.clear()) if t else None)
         self.v.addWidget(search)
 
         row = QHBoxLayout()
         open_btn = QPushButton("📂  開啟檔案")
         open_btn.setProperty("primary", True)
-        open_btn.setMinimumHeight(48)
+        open_btn.setMinimumHeight(theme.px(48))
         open_btn.clicked.connect(win.open_dialog)
         row.addWidget(open_btn, 2)
         for t, fn in (("建立空白文件", win.new_blank), ("圖片轉 PDF", lambda: win.tools.images_to_pdf()), ("合併 PDF", lambda: win.tools.combine())):
             b = QPushButton(t)
-            b.setMinimumHeight(48)
+            b.setMinimumHeight(theme.px(48))
             b.clicked.connect(fn)
             row.addWidget(b, 1)
         self.v.addLayout(row)
@@ -92,7 +92,7 @@ class Home(QScrollArea):
             self.v.addWidget(_section("最近開啟"))
             lst = QListWidget()
             lst.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            lst.setMaximumHeight(min(260, 34 * len(rec) + 8))
+            lst.setMaximumHeight(min(theme.px(260), theme.px(34) * len(rec) + 8))
             for r in rec[:12]:
                 folder = os.path.dirname(r["path"])
                 if len(folder) > 60:
@@ -123,7 +123,7 @@ class Home(QScrollArea):
 def _section(t):
     l = QLabel(t)
     f = l.font()
-    f.setPointSize(12)
+    f.setPointSize(theme.pt(12))
     f.setBold(True)
     l.setFont(f)
     l.setContentsMargins(0, 10, 0, 0)

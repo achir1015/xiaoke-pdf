@@ -1,4 +1,4 @@
-; 小柯文件PDF助手 Windows 版安裝程式（Inno Setup 6）
+﻿; 小柯文件PDF助手 Windows 版安裝程式（Inno Setup 6）
 ; 由 packaging\build.py 呼叫：ISCC /DAppVersion=1.0.0 packaging\installer.iss
 
 #ifndef AppVersion
@@ -6,13 +6,17 @@
 #endif
 #define AppName "小柯文件PDF助手"
 #define AppExe "XiaoKePdf.exe"
+#define Developer "吳玉柱"
+#define DevEmail "achir1015@gmail.com"
 
 [Setup]
 AppId={{6B7E2C1A-3F4D-4E8B-9C21-7A5D0E9F1B42}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=Achir
+AppPublisher={#Developer}
+AppContact={#DevEmail}
+AppCopyright=Copyright © 2026 {#Developer}（{#DevEmail}）
 AppPublisherURL=https://github.com/achir1015/xiaoke-pdf
 AppSupportURL=https://github.com/achir1015/xiaoke-pdf/issues
 AppUpdatesURL=https://github.com/achir1015/xiaoke-pdf/releases
@@ -40,9 +44,18 @@ ChangesAssociations=yes
 VersionInfoVersion={#AppVersion}
 VersionInfoProductName={#AppName}
 VersionInfoDescription={#AppName} 安裝程式
+VersionInfoCompany={#Developer}
+VersionInfoCopyright=Copyright © 2026 {#Developer}
 
 [Languages]
 Name: "cht"; MessagesFile: "compiler:Default.isl"
+
+[LangOptions]
+; 安裝畫面的字放大一倍（視窗會跟著字一起放大）
+DialogFontName=Microsoft JhengHei UI
+DialogFontSize=18
+WelcomeFontName=Microsoft JhengHei UI
+WelcomeFontSize=26
 
 [Messages]
 SetupAppTitle=安裝程式
@@ -79,7 +92,7 @@ BrowseDialogTitle=選擇資料夾
 BrowseDialogLabel=在下面清單中選擇資料夾，然後按「確定」。
 NewFolderName=新資料夾
 WelcomeLabel1=歡迎使用 [name] 安裝精靈
-WelcomeLabel2=這會在你的電腦上安裝 [name/ver]。%n%n在電腦上閱讀、編輯、註解、填寫、簽署與整理 PDF，全部在本機完成，檔案不會上傳。%n%n建議先關閉其他應用程式再繼續。
+WelcomeLabel2=這會在你的電腦上安裝 [name/ver]。%n%n在電腦上閱讀、編輯、註解、填寫、簽署與整理 PDF，全部在本機完成，檔案不會上傳。%n%n開發者：{#Developer}%nEmail：{#DevEmail}%n%n建議先關閉其他應用程式再繼續。
 WizardLicense=授權
 LicenseLabel=繼續之前，請閱讀以下重要資訊。
 LicenseLabel3=請閱讀以下授權。你必須接受授權的條款才能繼續安裝。
@@ -116,7 +129,7 @@ WizardInstalling=正在安裝
 InstallingLabel=正在把 [name] 安裝到你的電腦，請稍候。
 FinishedHeadingLabel=[name] 安裝完成
 FinishedLabelNoIcons=已經在你的電腦上安裝好 [name]。
-FinishedLabel=已經在你的電腦上安裝好 [name]。可以從開始功能表或桌面捷徑開啟。
+FinishedLabel=已經在你的電腦上安裝好 [name]。可以從開始功能表或桌面捷徑開啟。%n%n開發者：{#Developer}（{#DevEmail}）
 ClickFinish=按「完成」結束安裝。
 RunEntryExec=開啟 %1
 StatusExtractFiles=正在解壓縮檔案...
@@ -129,8 +142,6 @@ UninstallStatusLabel=正在從你的電腦移除 %1，請稍候。
 UninstalledAll=已經從你的電腦移除 %1。
 WizardUninstalling=解除安裝
 StatusUninstalling=正在解除安裝 %1...
-AdditionalIcons=其他捷徑：
-CreateDesktopIcon=建立桌面捷徑(&D)
 
 [Tasks]
 Name: "desktopicon"; Description: "建立桌面捷徑"; GroupDescription: "捷徑："

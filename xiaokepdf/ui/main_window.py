@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QDockWidget, QFileDialog
                                QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QStackedWidget, QStatusBar, QTabBar,
                                QToolBar, QToolButton, QVBoxLayout, QWidget)
 
-from .. import APP_NAME, VERSION, data_dir, resource
+from .. import APP_NAME, DEV_EMAIL, DEVELOPER, VERSION, data_dir, resource
 from ..engine import annots as AN
 from ..engine import text as T
 from ..engine.session import K_ANNOT, K_COPY, K_EDIT, K_FORM, K_PAGES, NeedPassword, Session
@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.prefs = Prefs()
         # 主題與介面字型要在建立任何元件之前套用，字級才會一致
-        theme.apply(QApplication.instance(), self.prefs.get("dark", False))
+        theme.apply(QApplication.instance(), self.prefs.get("dark", False), self.prefs.get("ui_scale", 1.8))
         self.sessions = []
         self.closed = []            # 最近關閉的分頁（檔案路徑）
         self.cur = -1
@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         self.strip_kind = None
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(resource("assets", "icon.ico")))
-        self.resize(1280, 860)
+        self.resize(1440, 920)
         self.setAcceptDrops(True)
         from .inline_editor import Inline
         self.inline = Inline(self)
@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
 
         tb = QToolBar("工具列")
         tb.setMovable(False)
-        tb.setIconSize(QSize(18, 18))
+        tb.setIconSize(QSize(theme.px(18), theme.px(18)))
         self.addToolBar(Qt.TopToolBarArea, tb)
         self.toolbar = tb
         menu_btn = QToolButton()
@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
         tb.addAction(a("zoom_out", "－", lambda: self.view.set_zoom(self.view.zoom / 1.2), "Ctrl+-", "縮小"))
         self.zoom_label = QPushButton("100%")
         self.zoom_label.setFlat(True)
-        self.zoom_label.setMinimumWidth(72)
+        self.zoom_label.setMinimumWidth(theme.px(72))
         self.zoom_label.clicked.connect(self._zoom_menu)
         tb.addWidget(self.zoom_label)
         tb.addAction(a("zoom_in", "＋", lambda: self.view.set_zoom(self.view.zoom * 1.2), "Ctrl+=", "放大"))
@@ -242,7 +242,7 @@ class MainWindow(QMainWindow):
         self.dock.setTitleBarWidget(QWidget())      # 面板本身有分頁標籤，不需要標題列
         self.dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetClosable)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
-        self.resizeDocks([self.dock], [260], Qt.Horizontal)
+        self.resizeDocks([self.dock], [theme.px(150)], Qt.Horizontal)
         self.dock.hide()
         # 狀態列
         sb = QStatusBar()
@@ -304,6 +304,8 @@ class MainWindow(QMainWindow):
             for name, desc, fn in items:
                 g.addAction(name, fn)
         h = m.addMenu("說明")
+        h.addAction("開發者：%s  %s" % (DEVELOPER, DEV_EMAIL), lambda: QDesktopServices.openUrl(QUrl("mailto:" + DEV_EMAIL)))
+        h.addSeparator()
         h.addAction("檢查更新…", lambda: self.check_update(manual=True))
         h.addAction("設定…", lambda: self.tools.settings())
         h.addAction("關於 " + APP_NAME, self.about)
@@ -415,7 +417,7 @@ class MainWindow(QMainWindow):
             self.zoom_label.setText("%d%%" % round(self.view.zoom * 100))
             if self.prefs.get("panels", True) and not self.dock.isVisible():
                 self.dock.show()
-                self.resizeDocks([self.dock], [240], Qt.Horizontal)
+                self.resizeDocks([self.dock], [theme.px(150)], Qt.Horizontal)
             self.panels.set_session(s)
         self.refresh_tabs()
         self.refresh_bars()
@@ -1086,10 +1088,10 @@ class MainWindow(QMainWindow):
 
     def about(self):
         QMessageBox.about(self, "關於 " + APP_NAME,
-                          "<b>%s</b> Windows 版 %s<br><br>在電腦上閱讀、編輯、註解、填寫、簽署與整理 PDF。<br>"
+                          "<b>%s</b> Windows 版 %s<br><br>開發者：%s（<a href='mailto:%s'>%s</a>）<br><br>在電腦上閱讀、編輯、註解、填寫、簽署與整理 PDF。<br>"
                           "隱私至上：文件絕對不會離開你的電腦，不需要帳號、不收集使用資料。<br><br>"
                           "使用的開放原始碼：PyMuPDF（AGPL）、Qt for Python（LGPL）、pyHanko（MIT）、Pillow、qrcode；"
-                          "中文字型 jf open 粉圓（SIL OFL 1.1）。<br>原始碼：https://github.com/achir1015/xiaoke-pdf" % (APP_NAME, VERSION))
+                          "中文字型 jf open 粉圓（SIL OFL 1.1）。<br>原始碼：https://github.com/achir1015/xiaoke-pdf" % (APP_NAME, VERSION, DEVELOPER, DEV_EMAIL, DEV_EMAIL))
 
     # ================================================================== 拖放、關閉
 

@@ -4,8 +4,10 @@ import sys
 
 APP_NAME = "小柯文件PDF助手"
 APP_ID = "XiaoKePdf"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 REPO = "achir1015/xiaoke-pdf"
+DEVELOPER = "吳玉柱"
+DEV_EMAIL = "achir1015@gmail.com"
 
 
 def resource(*parts):
