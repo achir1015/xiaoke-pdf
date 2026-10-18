@@ -1748,6 +1748,11 @@ public final class Ops {
                             }
                         } catch (Exception ignored) {}
                     }
+                    // 起點剛好壓在邊界上時（例如直書的字串起點在第一個字的上緣），改用這段字的中點判斷
+                    if (!inside) {
+                        float mx = adv / 2 * trm[0] + px, my = adv / 2 * trm[1] + py;
+                        inside = mx >= x0 && mx <= x1 && my >= y0 && my <= y1;
+                    }
                     if (inside) {
                         drop = true;
                         changed = true;

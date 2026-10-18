@@ -120,8 +120,9 @@ final class Vertical {
      * 再從原本的位置往下寫新文字。換行＝往左開新的一行；太長會在頁面下緣自動換到左邊一行。
      */
     static void replace(PDDocument d, Doc doc, int page, Column col, String text, TextStyle st, int bg) throws IOException {
-        RectF cover = new RectF(col.area);
-        cover.inset(-1.5f, -1.5f);
+        // 旋轉文字的字框常常很窄、位置也不準：以中心線左右各 3/4 字級為範圍，下緣再多留一點
+        RectF cover = new RectF(Math.min(col.area.left, col.cx - col.size * 0.75f), col.area.top - 1.5f,
+                Math.max(col.area.right, col.cx + col.size * 0.75f), col.area.bottom + col.size * 0.5f);
         if (!Ops.removeTextIn(d, doc, page, cover)) {
             try (PDPageContentStream cs = new PDPageContentStream(d, d.getPage(page), PDPageContentStream.AppendMode.APPEND, true, true)) {
                 cs.transform(Ops.boxMatrix(doc, page, cover, 0, 0));
