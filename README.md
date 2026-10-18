@@ -1,11 +1,39 @@
 # 小柯文件PDF助手（XiaoKePdf）https://achir1015.github.io/xiaoke-pdf/
 
-PDF 閱讀與編輯工具，有 **Android App** 與 **免安裝網頁版** 兩種，功能參考 [PdfCraft](https://github.com/PDFCraftTool/pdfcraft)。
+PDF 閱讀與編輯工具，有 **Windows 11 電腦版**、**Android App** 與 **免安裝網頁版** 三種，功能參考 [PdfCraft](https://github.com/PDFCraftTool/pdfcraft)。
 閱讀、編輯文字、註解、填表、簽署、整理頁面、合併分割、加密、塗銷、移除浮水印……全部在手機或瀏覽器上完成。
 
 **隱私至上：文件絕對不會離開你的裝置。** 不需要帳號、不收集使用資料、沒有雲端處理。App 只有按「檢查更新」時會連到 GitHub 查詢新版；網頁版只會下載程式函式庫與中文字型，PDF 本身不會傳出去。
 
 <img src="docs/edit-text.png" width="240" alt="編輯文字與格式"> <img src="docs/edited.png" width="240" alt="修改後的文字"> <img src="docs/remove-watermark.png" width="240" alt="移除浮水印">
+
+## 💻 Windows 11 電腦版 v1.0.1
+
+**[⬇️ 下載 Windows 安裝程式（XiaoKePdf-Windows-Setup.exe，約 75 MB）](https://github.com/achir1015/xiaoke-pdf/releases/download/win-v1.0.1/XiaoKePdf-Windows-Setup.exe)**
+
+也可以到 [Windows 版發佈頁面](https://github.com/achir1015/xiaoke-pdf/releases/tag/win-v1.0.1) 下載。開發者：吳玉柱（achir1015@gmail.com）
+
+**系統需求**：Windows 10 / 11（64 位元）。
+
+### 安裝方式
+
+1. 點上面的連結下載 `XiaoKePdf-Windows-Setup.exe`。
+2. 執行下載的檔案。如果出現藍色的「Windows 已保護您的電腦」（SmartScreen），按「其他資訊」→「仍要執行」。這是因為程式沒有購買付費的程式碼簽章憑證，不是病毒。
+3. 依照安裝精靈操作（全中文、大字）：
+   - 預設「只安裝給我」，**不需要系統管理員權限**；也可以選擇安裝給所有使用者。
+   - 可以勾選「建立桌面捷徑」與「加入 PDF 檔案的『開啟方式』選單」（不會改掉你原本預設的 PDF 程式）。
+4. 安裝完成後，從桌面或開始功能表開啟「小柯文件PDF助手」；也可以在檔案總管對 PDF 按右鍵 →「開啟方式」→「小柯文件PDF助手」，或直接把 PDF 拖進視窗。
+5. **更新**：選單「說明 → 檢查更新」，有新版時會下載並自動執行安裝程式，直接覆蓋舊版，設定、簽名、憑證都會保留。
+6. **移除**：設定 → 應用程式 → 已安裝的應用程式 →「小柯文件PDF助手」→ 解除安裝。
+
+### Windows 版特色
+
+- **像 Word 一樣就地編輯**：點頁面上的字，原位置直接變成編輯框，游標在點到的地方；表格裡只在那一格編輯，字變長時那一列自動撐高；插入表格、插入列／欄、合併儲存格。
+- 和 App 相同的完整功能：註解、表單、手寫簽名與數位簽章、整理頁面、合併分割、加／去浮水印、頁首頁尾、加密、塗銷、壓縮、匯出 Word／圖片／文字、列印。
+- 電腦版專屬：多分頁（右鍵可關閉其他、重新開啟關閉的分頁、在檔案總管中顯示）、Ctrl+K 指令面板、全螢幕與無干擾閱讀、深色主題、介面字級可調（預設放大 80%）、命令列工具 `XiaoKePdf-cli.exe`。
+- 每分鐘自動保存，程式意外結束後可以恢復；儲存後仍然可以復原。
+
+程式碼與開發說明在 [`windows/`](windows/README.md)（Python：PySide6 ＋ PyMuPDF，用 PyInstaller ＋ Inno Setup 打包）。
 
 ## 🌐 網頁版 v1.2.0（免安裝，電腦、手機都能用）
 
@@ -192,7 +220,7 @@ python build.py
 |---|---|---|
 | [PDFBox-Android](https://github.com/TomRoush/PdfBox-Android) 2.0.27.0 | PDF 解析、編輯、文字擷取 | Apache 2.0 |
 | [Bouncy Castle](https://www.bouncycastle.org/) 1.72 | 數位簽章 | MIT |
-| [jf open 粉圓](https://github.com/justfont/open-huninn-font) 2.1 | 寫入 PDF 的中文字型（App 與網頁版共用） | SIL Open Font License 1.1（漢字部分源自 Kosugi Maru，Apache 2.0），授權全文見 `assets/fonts/jf-openhuninn-OFL.txt` |
+| [jf open 粉圓](https://github.com/justfont/open-huninn-font) 2.1 | 寫入 PDF 的中文字型（App、Windows 版與網頁版共用） | SIL Open Font License 1.1（漢字部分源自 Kosugi Maru，Apache 2.0），授權全文見 `assets/fonts/jf-openhuninn-OFL.txt` |
 
 頁面繪製使用 Android 內建的 PdfRenderer。
 
@@ -206,3 +234,13 @@ python build.py
 | [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0 | 影音卡片的 QR Code | MIT |
 | [Tesseract.js](https://github.com/naptha/tesseract.js) 6.0 ＋ 繁體中文辨識資料 | OCR 文字辨識（第一次使用時才下載） | Apache 2.0 |
 | [pako](https://github.com/nodeca/pako) 2.1 | fontkit 的解壓縮 | MIT ／ Zlib |
+
+Windows 版另外使用：
+
+| 元件 | 用途 | 授權 |
+|---|---|---|
+| [PyMuPDF](https://github.com/pymupdf/PyMuPDF)（MuPDF） | PDF 繪製、解析與編輯 | AGPL-3.0（因此 Windows 版以 AGPL-3.0 發佈） |
+| [Qt for Python（PySide6）](https://doc.qt.io/qtforpython/) | 視窗介面 | LGPL-3.0 |
+| [pyHanko](https://github.com/MatthiasValvekens/pyHanko) | 數位簽章 | MIT |
+| [Pillow](https://python-pillow.org/)、[qrcode](https://github.com/lincolnloop/python-qrcode) | 圖片、QR Code | MIT-CMU、BSD |
+| [PyInstaller](https://pyinstaller.org/)、[Inno Setup](https://jrsoftware.org/isinfo.php) | 打包與安裝程式 | GPL（含例外）、Inno Setup License |
