@@ -1,0 +1,25 @@
+小柯文件PDF助手（Windows 版）授權說明
+====================================
+
+本程式免費、開放原始碼，原始碼在 https://github.com/achir1015/xiaoke-pdf 。
+
+隱私：文件只在你的電腦上處理，不會上傳；不需要帳號，不收集使用資料。
+只有在檢查更新時會連到 GitHub 查詢新版本（可在「設定」關閉自動檢查）。
+
+本程式以 GNU Affero General Public License v3.0（AGPL-3.0）授權發佈，
+因為它使用了 AGPL 授權的 PyMuPDF / MuPDF。你可以自由使用、複製、修改與散布；
+若散布修改後的版本（含透過網路提供服務），必須同樣以 AGPL-3.0 公開原始碼。
+完整條文：https://www.gnu.org/licenses/agpl-3.0.html
+
+使用的開放原始碼元件
+--------------------
+- PyMuPDF / MuPDF（Artifex）— AGPL-3.0 — PDF 繪製、解析與編輯
+- Qt for Python（PySide6）— LGPL-3.0 — 視窗介面
+- pyHanko、pyhanko-certvalidator — MIT — 數位簽章
+- cryptography — Apache-2.0 / BSD — 憑證
+- Pillow — MIT-CMU — 圖片處理
+- qrcode — BSD — QR Code
+- jf open 粉圓 2.1（justfont）— SIL Open Font License 1.1 — 寫入 PDF 的中文字型
+  （漢字部分源自 Kosugi Maru，Apache 2.0；授權全文見 assets\fonts\jf-openhuninn-OFL.txt）
+
+本程式「依現狀」提供，不附任何明示或默示的擔保。重要文件請先備份。
