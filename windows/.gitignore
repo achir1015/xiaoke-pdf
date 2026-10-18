@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+build/
+dist/
+packaging/version_info.txt
+*.spec.bak
