@@ -4,9 +4,17 @@
 
 **隱私至上：文件只在你的電腦上處理，絕對不會上傳。** 不需要帳號、不收集使用資料；只有檢查更新時會連到 GitHub。
 
+開發者：吳玉柱（achir1015@gmail.com）
+
+## 下載
+
+**[⬇️ 下載 Windows 安裝程式（XiaoKePdf-Windows-Setup.exe）](https://github.com/achir1015/xiaoke-pdf/releases/download/win-v1.0.1/XiaoKePdf-Windows-Setup.exe)**
+
+所有版本：<https://github.com/achir1015/xiaoke-pdf/releases>（Windows 版的 tag 是 `win-v版本`）
+
 ## 安裝
 
-1. 執行 `XiaoKePdf-Windows-Setup.exe`。
+1. 執行下載的 `XiaoKePdf-Windows-Setup.exe`。如果出現「Windows 已保護您的電腦」（SmartScreen），按「其他資訊」→「仍要執行」（程式沒有購買付費的程式碼簽章憑證，不是病毒）。
 2. 預設「只安裝給我」，不需要系統管理員權限（也可以選擇安裝給所有使用者）。
 3. 可以勾選「建立桌面捷徑」與「加入 PDF 檔案的『開啟方式』選單」（不會改掉你原本預設的 PDF 程式）。
 4. 安裝後從開始功能表或桌面開啟；也可以在檔案總管對 PDF 按右鍵 →「開啟方式」→「小柯文件PDF助手」。
